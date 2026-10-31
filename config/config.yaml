@@ -1,0 +1,324 @@
+# ===========================================================================
+# Central configuration for the credit risk scoring pipeline.
+#
+# Every tunable constant used anywhere in the project is declared here, so that
+# an experiment can be reproduced or modified without touching source code.
+# Values recorded under `best_params` are the outcome of the Optuna studies
+# described in `scripts/run_tuning.py`.
+# ===========================================================================
+
+# --- Project identity ------------------------------------------------------
+project:
+  name: credit-risk-scoring                  
+  description: >                             
+    Credit scoring with gradient boosting, cost-based decision thresholds
+    and SHAP-based explainability.
+
+# --- Global reproducibility ------------------------------------------------
+random_state: 42
+
+# --- Filesystem layout -----------------------------------------------------
+# All paths are relative to the repository root and resolved at load time.
+paths:
+  raw_data: data/raw/cs-training.csv         # Source dataset (git-ignored).
+  models_dir: models                         # Serialised estimators land here.
+  figures_dir: reports/figures               # Generated PNG figures.
+  tables_dir: reports/tables                 # Generated CSV result tables.
+  results_dir: results                       # Tuning and metric evidence, tracked in git.
+
+# --- Dataset definition ----------------------------------------------------
+data:
+  target: SeriousDlqin2yrs                   # Binary label: 1 = default.
+  drop_columns:                              # Columns removed on load.
+    - "Unnamed: 0"                           # Row index exported by the source.
+  test_size: 0.2                             # Fraction held out for testing.
+  stratify: true                             # Preserve class ratio in both sets.
+
+# --- Feature engineering and cleaning --------------------------------------
+preprocessing:
+  # Winsorisation caps extreme values at quantiles. Bounds are learnt
+  # on the training fold only, then applied unchanged to validation and test
+  # data.
+  winsorize:
+    columns:
+      - RevolvingUtilizationOfUnsecuredLines 
+      - DebtRatio                             
+      - MonthlyIncome                         
+    lower_quantile: 0.01                      
+    upper_quantile: 0.99                      
+
+  # Age is bounded by domain knowledge rather than by quantiles, because the
+  # dataset contains an impossible value of zero.
+  age_column: age                             # Name of the age feature.
+  age_bounds:
+    min: 18                                   # Legal minimum age for a credit contract.
+    max: 120                                  # Upper bound on plausible human age.
+
+  # The three delinquency counters correlate at roughly 0.98 with one another.
+  # Collapsing them into a single total removes that multicollinearity, which
+  # matters for the linear model. Tree ensembles keep the raw counters.
+  delinquency:
+    columns:
+      - NumberOfTime30-59DaysPastDueNotWorse  # Late 30-59 days, count.
+      - NumberOfTime60-89DaysPastDueNotWorse  # Late 60-89 days, count.
+      - NumberOfTimes90DaysLate               # Late 90+ days, count.
+    output_column: TotalLatePayments          # Name of the aggregated feature.
+
+  imputation_strategy: median                 # Robust to the skew in MonthlyIncome.
+
+# --- Cross-validation protocol ---------------------------------------------
+cross_validation:
+  n_splits: 5                                 
+  shuffle: true                               
+  scoring: average_precision                  # PR-AUC: the right metric under
+                                              # severe class imbalance (~6.7% positives).
+
+# --- Hyperparameter search -------------------------------------------------
+tuning:
+  n_trials: 30                                # Optuna trials per model.
+  direction: maximize                         # Higher PR-AUC is better.
+
+# --- Model definitions -----------------------------------------------------
+# Each entry carries three blocks:
+#   fixed_params  - constants never searched over.
+#   best_params   - the winning configuration from the Optuna study.
+#   search_space  - the domain explored during tuning (optional re-run).
+models:
+
+  logistic_regression:
+    display_name: Logistic Regression         
+    scale_features: true                      
+    combine_delinquency: true                 
+    clip_outliers: true                       
+    fixed_params:
+      penalty: l2                            
+      solver: lbfgs                           
+      max_iter: 2000                          
+    best_params:
+      # Produced by scripts/run_tuning.py on 2026-10-12: 30 Optuna trials, seed 42, CV PR-AUC 0.333368.
+      C: 878.1674081630572
+      class_weight: balanced
+    search_space:
+      C:
+        type: float                          
+        low: 0.001                            
+        high: 1000.0                          # Widened: the first search ended at the old bound of 10.
+        log: true                            
+      class_weight:
+        type: categorical                   
+        choices: [null, balanced]             
+
+  random_forest:
+    display_name: Random Forest               
+    scale_features: false                     
+    combine_delinquency: false                
+    clip_outliers: false                     
+    fixed_params:
+      n_jobs: -1                              
+    best_params:
+      # Produced by scripts/run_tuning.py on 2026-10-12: 30 Optuna trials, seed 42, CV PR-AUC 0.398552.
+      n_estimators: 500
+      max_depth: 9
+      min_samples_split: 11
+      min_samples_leaf: 8
+      max_features: sqrt
+      class_weight: null
+    search_space:
+      n_estimators:
+        type: int                          
+        low: 200                             
+        high: 800                             
+        step: 100                             
+      max_depth:
+        type: int
+        low: 4
+        high: 20
+      min_samples_split:
+        type: int
+        low: 2
+        high: 20
+      min_samples_leaf:
+        type: int
+        low: 1
+        high: 10
+      max_features:
+        type: categorical
+        choices: [sqrt, log2, null]          
+      class_weight:
+        type: categorical
+        choices: [null, balanced, balanced_subsample]
+
+  xgboost:
+    display_name: XGBoost                     
+    scale_features: false                     
+    combine_delinquency: false                
+    clip_outliers: false                      
+    fixed_params:
+      objective: binary:logistic              
+      eval_metric: logloss                    
+      n_jobs: 1                               
+    best_params:
+      # Produced by scripts/run_tuning.py on 2026-10-12: 30 Optuna trials, seed 42, CV PR-AUC 0.404027.
+      n_estimators: 700
+      max_depth: 5
+      learning_rate: 0.050953218778153
+      subsample: 0.6879766685789783
+      colsample_bytree: 0.6763843936297275
+      min_child_weight: 19
+      gamma: 4.130659136538012
+      scale_pos_weight: 1.0148600075725414
+    search_space:
+      n_estimators:
+        type: int
+        low: 200
+        high: 800
+        step: 100
+      max_depth:
+        type: int
+        low: 3
+        high: 8
+      learning_rate:
+        type: float
+        low: 0.01
+        high: 0.2
+        log: true
+      subsample:
+        type: float
+        low: 0.6
+        high: 1.0
+      colsample_bytree:
+        type: float
+        low: 0.6
+        high: 1.0
+      min_child_weight:
+        type: int
+        low: 1
+        high: 50                              # Widened: the first search ended at the old bound of 10.
+      gamma:
+        type: float
+        low: 0.0
+        high: 5.0
+      scale_pos_weight:
+        type: float
+        low: 1.0                              
+        high_ratio_to_imbalance: 1.5          
+        log: true
+
+  lightgbm:
+    display_name: LightGBM                    
+    scale_features: false                     
+    combine_delinquency: false                
+    clip_outliers: false                      
+    fixed_params:
+      objective: binary                       
+      metric: binary_logloss                  
+      n_jobs: -1                              
+      verbosity: -1                           
+      subsample_freq: 1                       # Row subsampling is ignored unless this is > 0.
+    best_params:
+      # Produced by scripts/run_tuning.py on 2026-10-12: 30 Optuna trials, seed 42, CV PR-AUC 0.404450.
+      n_estimators: 600
+      learning_rate: 0.0151874792267224
+      num_leaves: 36
+      max_depth: 5
+      min_child_samples: 230
+      subsample: 0.9140703845572056
+      colsample_bytree: 0.6798695128633439
+      reg_alpha: 0.0372539383957888
+      reg_lambda: 0.0916374180877877
+      scale_pos_weight: 1.1517572745772624
+    search_space:
+      n_estimators:
+        type: int
+        low: 200
+        high: 800
+        step: 100
+      learning_rate:
+        type: float
+        low: 0.01
+        high: 0.2
+        log: true
+      num_leaves:
+        type: int
+        low: 4                                # Widened: the first search ended at the old bound of 15.
+        high: 127
+        step: 8
+      max_depth:
+        type: int
+        low: 3
+        high: 10
+      min_child_samples:
+        type: int
+        low: 10
+        high: 500                             # Widened: the first search ended at the old bound of 100.
+        step: 10
+      subsample:
+        type: float
+        low: 0.6
+        high: 1.0
+      colsample_bytree:
+        type: float
+        low: 0.6
+        high: 1.0
+      reg_alpha:
+        type: float
+        low: 0.0001
+        high: 10.0
+        log: true
+      reg_lambda:
+        type: float
+        low: 0.0001
+        high: 10.0
+        log: true
+      scale_pos_weight:
+        type: float
+        low: 1.0
+        high_ratio_to_imbalance: 1.5
+        log: true
+
+# --- Probability calibration -----------------------------------------------
+# Boosted trees optimise ranking, not calibration, so their raw scores are not
+# usable as probabilities of default. Isotonic regression corrects this.
+calibration:
+  model: xgboost                              
+  method: isotonic                            
+  cv: 5                                       
+                                              
+  n_bins: 10                                 
+  bin_strategy: quantile                      
+
+# --- Decision threshold ----------------------------------------------------
+# With calibrated probabilities the cost-optimal cut-off follows analytically.
+# Rejecting a good applicant forgoes the margin r; accepting a bad one loses
+# LGD of the exposure. Writing k for the cost ratio C_FN / C_FP = LGD / r, the
+# Bayes-optimal threshold is tau* = C_FP / (C_FN + C_FP) = 1 / (k + 1).
+# The exposure at default cancels out under a constant portfolio-level LGD.
+threshold:
+  loss_given_default: 0.65                    
+  net_margin: 0.13                            
+  sensitivity_k_grid: [2, 3, 4, 5, 6, 7, 8, 9, 10]  
+
+# --- Explainability --------------------------------------------------------
+explainability:
+  sample_size: 5000                           
+                                              
+  max_display: 10                             
+
+# --- Score reporting -------------------------------------------------------
+# The served probability is also reported on the points scale lenders use.
+# score = offset + factor * ln((1-p)/p), with the two constants chosen so that
+# base_odds sits exactly at base_score and every points_to_double points
+# doubles the odds of repayment.
+scoring:
+  base_score: 600                             # Points at the reference odds.
+  base_odds: 50.0                             # Good-to-bad odds at base_score.
+  points_to_double: 20                        # Points that double the odds.
+  min_score: 300                              # Floor, as on a published scale.
+  max_score: 850                              # Ceiling, as on a published scale.
+
+# --- Figure rendering ------------------------------------------------------
+plotting:
+  dpi: 300                                    
+  format: png                                
+  style: seaborn-v0_8-whitegrid              
+  figsize_default: [8, 6]                    

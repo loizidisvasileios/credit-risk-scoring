@@ -1,0 +1,122 @@
+# ===========================================================================
+# Build system
+# ---------------------------------------------------------------------------
+# setuptools is the reference build backend and needs no extra tooling beyond
+# pip, which keeps `pip install -e .` working on a clean machine.
+# ===========================================================================
+[build-system]
+requires = ["setuptools>=68", "wheel"]        # Minimum backend versions.
+build-backend = "setuptools.build_meta"       # Entry point invoked by pip.
+
+# ===========================================================================
+# Project metadata
+# ===========================================================================
+[project]
+name = "credit-scoring"                       # Distribution name on disk.
+version = "1.0.0"                             # Semantic version of the pipeline.
+description = "Credit risk scoring with gradient boosting, cost-based decision thresholds and SHAP explainability."
+readme = "README.md"                          # Long description source.
+requires-python = ">=3.10"                    # Minimum interpreter supported.
+license = { text = "MIT" }                    # Permissive licence.
+authors = [
+    { name = "Vasileios Loizidis" },
+]
+keywords = [
+    "credit-scoring",                         # Application domain.
+    "machine-learning",                       # General field.
+    "xgboost",                                # Primary model family.
+    "calibration",                            # Probability calibration.
+    "shap",                                   # Explainability method.
+]
+classifiers = [
+    "Programming Language :: Python :: 3",    # Language and major version.
+    "License :: OSI Approved :: MIT License", # Licence identifier.
+    "Operating System :: OS Independent",     # No platform-specific code.
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# --- Runtime dependencies --------------------------------------------------
+# Versions are pinned with a lower bound and an exclusive upper bound: patch
+# and minor upgrades stay available, while a major release cannot silently
+# break the serialised model or the estimator APIs.
+dependencies = [
+    "numpy>=1.26,<3.0",                       # Array backend.
+    "pandas>=2.0,<4.0",                       # Tabular data handling.
+    "scipy>=1.11,<2.0",                       # Statistical functions.
+    "scikit-learn>=1.6,<1.8",                 # Pipelines, metrics, calibration.
+    "xgboost>=2.0,<4.0",                      # Gradient boosting, production model.
+    "lightgbm>=4.0,<5.0",                     # Gradient boosting, benchmark model.
+    "optuna>=3.5,<5.0",                       # Bayesian hyperparameter search.
+    "shap>=0.44,<1.0",                        # Shapley-value explanations.
+    "matplotlib>=3.8,<4.0",                   # Figure rendering.
+    "seaborn>=0.13,<1.0",                     # Statistical plot helpers.
+    "pyyaml>=6.0,<7.0",                       # Configuration file parsing.
+    "pydantic>=2.6,<3.0",                     # Configuration and payload validation.
+    "joblib>=1.3,<2.0",                       # Model serialisation.
+]
+
+# --- Optional dependency groups --------------------------------------------
+[project.optional-dependencies]
+# Serving layer: installed only when the REST API or dashboard is run.
+app = [
+    "fastapi>=0.110,<1.0",                    # REST framework for the scoring API.
+    "uvicorn[standard]>=0.27,<1.0",           # ASGI server running the API.
+    "dash>=2.16,<4.0",                        # Interactive web dashboard.
+    "plotly>=5.19,<7.0",                      # Charts used by the dashboard.
+    "requests>=2.31,<3.0",                    # Dashboard-to-API HTTP client.
+]
+# Dataset download: needed only to fetch the raw data from Kaggle.
+data = [
+    "kaggle>=1.6,<2.0",                       # Official Kaggle API client.
+]
+# Development tooling: linting, formatting and tests.
+dev = [
+    "pytest>=8.0,<9.0",                       # Test runner.
+    "pytest-cov>=4.1,<7.0",                   # Coverage reporting.
+    "ruff>=0.3,<1.0",                         # Linter and formatter.
+    "httpx>=0.27,<1.0",                       # Test client for the FastAPI app.
+]
+
+# ===========================================================================
+# Package discovery
+# ===========================================================================
+[tool.setuptools.packages.find]
+where = ["src"]                               # Source layout: importable code lives in src/.
+
+# ===========================================================================
+# Ruff: linting and formatting
+# ===========================================================================
+[tool.ruff]
+line-length = 100                             # Slightly wider than PEP 8 for readability.
+target-version = "py310"                      # Oldest interpreter the rules must satisfy.
+
+[tool.ruff.lint]
+select = [
+    "E",                                      # pycodestyle errors.
+    "F",                                      # pyflakes: undefined names, unused imports.
+    "I",                                      # isort: import ordering.
+    "N",                                      # pep8-naming conventions.
+    "UP",                                     # pyupgrade: modern syntax.
+    "B",                                      # flake8-bugbear: likely bugs.
+    "D",                                      # pydocstyle: docstring presence and format.
+]
+ignore = [
+    "D104",                                   # Missing docstring in public package.
+    "N803",                                   # Argument name should be lowercase: X is standard in ML.
+    "N806",                                   # Variable in function should be lowercase: same reason.
+]
+
+[tool.ruff.lint.per-file-ignores]
+# A test name states the behaviour under test; a docstring would only repeat it.
+"tests/*" = ["D103"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"                          # NumPy docstring style, the scientific standard.
+
+# ===========================================================================
+# Pytest
+# ===========================================================================
+[tool.pytest.ini_options]
+testpaths = ["tests"]                         # Directory scanned for tests.
+pythonpath = ["src", "."]              # Import the library from src/ and the app/ package from the root.
+addopts = "-v --strict-markers"               # Verbose output; reject undeclared markers.
