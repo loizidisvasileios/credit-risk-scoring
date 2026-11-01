@@ -11,8 +11,7 @@ import pandas as pd
 from credit_scoring.config import Config, load_config
 from credit_scoring.plotting import INK, SURFACE, diverging_cmap, figure, figure_path, series_color
 
-# Values the delinquency counters use as codes rather than as counts. The real
-# counts stop at 17, so these are flags from the source system.
+# real values stop at 17 and nothing appears until 96. Thus, the codes 96 and 98 are not counts
 DELINQUENCY_CODES = (96, 98)
 
 
@@ -134,6 +133,125 @@ def implausible_value_report(frame: pd.DataFrame, config: Config | None = None) 
     table = pd.DataFrame(rows, columns=["check", "rows"])
     table["rows_pct"] = (table["rows"] / len(frame) * 100).round(4)
     return table
+
+
+def counter_value_counts(frame: pd.DataFrame, config: Config | None = None) -> pd.DataFrame:
+    """Return how often every distinct value occurs in the delinquency counters.
+
+    A counter runs upwards from zero without gaps. Listing the frequencies makes
+    the break visible: they thin out, stop, and then two isolated values reappear
+    far above the rest, which is what a code looks like and not what a count
+    looks like.
+    """
+    cfg = config or load_config()
+    columns = [c for c in cfg.preprocessing.delinquency.columns if c in frame.columns]
+    table = pd.DataFrame({column: frame[column].value_counts() for column in columns})
+    return table.fillna(0).astype(int).sort_index().reset_index(names="value")
+
+
+def default_rate_by_group(
+    frame: pd.DataFrame,
+    config: Config | None = None,
+    utilisation_column: str = "RevolvingUtilizationOfUnsecuredLines",
+    utilisation_thresholds: Sequence[float] = (1.0, 10.0),
+) -> pd.DataFrame:
+    """Compare the default rate inside each suspect subgroup against the whole training set.
+
+    Counting anomalies says how many there are, not whether they matter. A
+    subgroup that defaults several times more often than the base rate carries
+    signal and needs a flag of its own; one that matches the base rate is noise
+    and can be cleaned away.
+    """
+    cfg = config or load_config()
+    target = frame[cfg.data.target]
+    baseline = target.mean()
+
+    groups = {
+        f"{column} missing": frame[column].isna()
+        for column in frame.columns
+        if frame[column].isna().any()
+    }
+    delinquency = [c for c in cfg.preprocessing.delinquency.columns if c in frame.columns]
+    if delinquency:
+        # One flag for the row, because the codes appear in all three counters together.
+        groups[f"delinquency code in {DELINQUENCY_CODES}"] = (
+            frame[delinquency].isin(DELINQUENCY_CODES).any(axis=1)
+        )
+    age = cfg.preprocessing.age_column
+    if age in frame.columns:
+        groups[f"{age} == 0"] = frame[age] == 0
+    if utilisation_column in frame.columns:
+        for limit in utilisation_thresholds:
+            # A utilisation ratio reports drawn credit over the limit, so anything
+            # above 1 is already unusual and anything far above it is not a ratio.
+            groups[f"{utilisation_column} > {limit:g}"] = frame[utilisation_column] > limit
+
+    rows = [
+        {
+            "group": "all applicants",
+            "rows": len(frame),
+            "rows_pct": 100.0,
+            "default_rate": baseline,
+            "lift": 1.0,
+        }
+    ]
+    rows += [
+        {
+            "group": name,
+            "rows": int(mask.sum()),
+            "rows_pct": mask.mean() * 100,
+            "default_rate": target[mask].mean(),
+            # Times more often than the portfolio: 1.0 means the subgroup is ordinary.
+            "lift": target[mask].mean() / baseline,
+        }
+        for name, mask in groups.items()
+        if mask.any()
+    ]
+    return pd.DataFrame(rows)
+
+
+def default_rate_by_band(
+    frame: pd.DataFrame,
+    column: str,
+    edges: Sequence[float],
+    config: Config | None = None,
+) -> pd.DataFrame:
+    """Return the default rate inside mutually exclusive value bands of one column.
+
+    Cumulative thresholds hide where behaviour changes, because each one also
+    contains every band above it. Exclusive bands show the point at which the
+    default rate stops rising, which is where a genuine signal ends and
+    corrupted values begin.
+    """
+    cfg = config or load_config()
+    target = frame[cfg.data.target]
+    # include_lowest keeps the zeros, which would otherwise fall outside every band.
+    band = pd.cut(frame[column], bins=list(edges), include_lowest=True)
+
+    table = (
+        target.groupby(band, observed=False)
+        .agg(rows="size", default_rate="mean")
+        .reset_index()
+        .rename(columns={column: "band"})
+    )
+    table["rows_pct"] = table["rows"] / len(frame) * 100
+    table["lift"] = table["default_rate"] / target.mean()
+    return table[["band", "rows", "rows_pct", "default_rate", "lift"]]
+
+
+def debt_ratio_by_income_missingness(
+    frame: pd.DataFrame, ratio_column: str = "DebtRatio", income_column: str = "MonthlyIncome"
+) -> pd.DataFrame:
+    """Describe the debt ratio separately for rows that do and do not report an income.
+
+    A ratio and an absolute amount cannot share one column. If the two groups
+    differ by orders of magnitude, the column is not measuring the same quantity
+    in both, and imputing the income afterwards cannot repair it.
+    """
+    grouped = frame.groupby(frame[income_column].isna())[ratio_column]
+    table = grouped.describe(percentiles=[0.5, 0.9, 0.95, 0.99])
+    table = table.rename(index={False: "income reported", True: "income missing"})
+    return table.reset_index(names="group")
 
 
 def duplicate_report(frame: pd.DataFrame, config: Config | None = None) -> pd.DataFrame:

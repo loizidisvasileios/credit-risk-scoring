@@ -10,6 +10,10 @@ from credit_scoring.config import load_config
 from credit_scoring.data import load_dataset, split_data
 from credit_scoring.eda import (
     correlation_with_target,
+    counter_value_counts,
+    debt_ratio_by_income_missingness,
+    default_rate_by_band,
+    default_rate_by_group,
     descriptive_statistics,
     duplicate_report,
     implausible_value_report,
@@ -27,8 +31,7 @@ from credit_scoring.eda import (
 def main() -> None:
     """Describe the training set, saving every table and figure to the reports directory."""
     cfg = load_config()
-    # Only the training half is explored: anything learned from the test set
-    # would leak into the decisions taken later.
+    
     frame = split_data(load_dataset(cfg), cfg).training_frame()
 
     tables = {
@@ -37,6 +40,15 @@ def main() -> None:
         "missing_per_row": missing_per_row(frame),
         "outliers": outlier_report(frame, cfg),
         "implausible_values": implausible_value_report(frame, cfg),
+        "delinquency_value_counts": counter_value_counts(frame, cfg),
+        "default_rate_by_group": default_rate_by_group(frame, cfg),
+        "debt_ratio_by_income_missingness": debt_ratio_by_income_missingness(frame),
+        "utilisation_bands": default_rate_by_band(
+            frame,
+            "RevolvingUtilizationOfUnsecuredLines",
+            [0, 1, 2, 5, 10, 100, float("inf")],
+            cfg,
+        ),
         "duplicates": duplicate_report(frame, cfg),
         "correlation_with_target": correlation_with_target(frame, cfg),
     }
@@ -47,8 +59,7 @@ def main() -> None:
         print(f"saved: {path}")
 
     features = [column for column in frame.columns if column != cfg.data.target]
-    # The columns winsorised later are exactly the heavy-tailed ones, so the
-    # same list decides which plots need their far tail hidden to stay readable.
+    
     skewed = cfg.preprocessing.winsorize.columns
 
     plot_target_balance(frame, cfg)
