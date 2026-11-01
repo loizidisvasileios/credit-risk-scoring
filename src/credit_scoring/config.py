@@ -10,8 +10,6 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-# The package sits at <root>/src/credit_scoring, so the repository root is two
-# levels up. Deriving it here lets scripts run from any working directory.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "config.yaml"
 
@@ -70,7 +68,7 @@ class WinsorizeConfig(_Section):
 
 
 class AgeBounds(_Section):
-    """Plausible age range, set by domain knowledge rather than by the data."""
+    """Minimum and maximum ages for applicants."""
 
     min: int = Field(ge=0)
     max: int = Field(gt=0)
@@ -83,8 +81,19 @@ class DelinquencyConfig(_Section):
     output_column: str
 
 
+class DataQualityConfig(_Section):
+    """Recorded values that are not measurements."""
+
+    delinquency_codes: list[int]
+    utilisation_column: str
+    utilisation_max: float = Field(gt=0.0)
+    ratio_column: str
+    income_column: str
+    flag_missing_columns: list[str]
+
+
 class PreprocessingConfig(_Section):
-    """Cleaning and feature engineering settings."""
+    """Cleaning and feature engineering policy."""
 
     winsorize: WinsorizeConfig
     age_column: str
@@ -94,7 +103,7 @@ class PreprocessingConfig(_Section):
 
 
 class CrossValidationConfig(_Section):
-    """Resampling protocol shared by tuning and model comparison."""
+    """Cross-validation settings for model selection and probability calibration."""
 
     n_splits: int = Field(ge=2)
     shuffle: bool
@@ -135,12 +144,7 @@ class CalibrationConfig(_Section):
 
 
 class ThresholdConfig(_Section):
-    """Economic assumptions behind the accept/reject cut-off.
-
-    Rejecting a good applicant forgoes the margin ``r``; accepting a defaulting
-    one loses ``LGD`` of the exposure. With ``k = LGD / r``, the cost-optimal
-    cut-off on a calibrated probability is ``1 / (k + 1)``.
-    """
+    """Economic assumptions behind the accept/reject cut-off."""
 
     loss_given_default: float = Field(gt=0.0, le=1.0)
     net_margin: float = Field(gt=0.0, le=1.0)
@@ -165,12 +169,7 @@ class ExplainabilityConfig(_Section):
 
 
 class ScoringConfig(_Section):
-    """Points scale the served probability is reported on.
-
-    A probability is the right output for a decision rule but an awkward one to
-    read, so lenders publish a score instead: it rises as risk falls, and every
-    ``points_to_double`` points doubles the odds of repayment.
-    """
+    """Scorecard settings for the production model."""
 
     base_score: int = Field(ge=0)
     base_odds: float = Field(gt=0.0)
@@ -190,7 +189,7 @@ class ScoringConfig(_Section):
 
 
 class PlottingConfig(_Section):
-    """Figure rendering defaults."""
+    """Plotting settings for the reports."""
 
     dpi: int = Field(ge=72)
     format: str
@@ -205,6 +204,7 @@ class Config(_Section):
     random_state: int
     paths: Paths
     data: DataConfig
+    data_quality: DataQualityConfig
     preprocessing: PreprocessingConfig
     cross_validation: CrossValidationConfig
     tuning: TuningConfig
@@ -227,7 +227,7 @@ class Config(_Section):
 
 @cache
 def load_config(config_path: str | Path | None = None) -> Config:
-    """Read and validate the YAML configuration, caching the result per path."""
+    """Read and validate the YAML configuration."""
     path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
     if not path.is_file():
         raise FileNotFoundError(f"Configuration file not found: {path}")

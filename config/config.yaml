@@ -66,6 +66,28 @@ preprocessing:
 
   imputation_strategy: median                 # Robust to the skew in MonthlyIncome.
 
+# --- Data quality ----------------------------------------------------------
+# Values the source system recorded that are not measurements. They are turned
+# into missing values and flagged, so a model can still use the fact that the
+# value was unusable without reading the number itself.
+data_quality:
+  # real values stop at 17 and nothing appears until 96. Thus, the codes 96 and 98 are not counts
+  delinquency_codes: [96, 98]
+
+  # A utilisation ratio is drawn credit over the limit. Above 100 the default
+  # rate falls back to the portfolio average, so those values carry no signal.
+  utilisation_column: RevolvingUtilizationOfUnsecuredLines
+  utilisation_max: 100
+
+  # With no income to divide by, this column holds an amount instead of a ratio.
+  ratio_column: DebtRatio
+  income_column: MonthlyIncome
+
+  # Columns whose absence is itself informative and gets its own indicator.
+  flag_missing_columns:
+    - MonthlyIncome
+    - NumberOfDependents
+
 # --- Cross-validation protocol ---------------------------------------------
 cross_validation:
   n_splits: 5                                 

@@ -14,7 +14,7 @@ from credit_scoring.config import Config, ModelConfig, load_config
 
 
 def _require(X: object, columns: Sequence[str], owner: str) -> pd.DataFrame:
-    """Return ``X`` as a DataFrame with the expected columns, or raise."""
+    """Validate that ``X`` is a DataFrame and contains the columns this step needs."""
     if not isinstance(X, pd.DataFrame):
         raise TypeError(f"{owner} needs a DataFrame, received {type(X).__name__}")
     missing = [column for column in columns if column not in X.columns]
@@ -23,12 +23,81 @@ def _require(X: object, columns: Sequence[str], owner: str) -> pd.DataFrame:
     return X
 
 
-class OutlierClipper(BaseEstimator, TransformerMixin):
-    """Cap extreme values at quantiles learnt from the data seen in ``fit``.
+class DataQualityCleaner(BaseEstimator, TransformerMixin):
+    """Turn recorded values that are not measurements into missing values, and flag them."""
 
-    Inside cross-validation each fold therefore derives its own limits from its
-    own training part, so nothing is learnt from the data it is scored on.
-    """
+    def __init__(
+        self,
+        delinquency_columns: Sequence[str] = (),
+        delinquency_codes: Sequence[int] = (),
+        utilisation_column: str | None = None,
+        utilisation_max: float = float("inf"),
+        ratio_column: str | None = None,
+        income_column: str | None = None,
+        flag_missing_columns: Sequence[str] = (),
+        delinquency_flag: str = "DelinquencyCodeFlag",
+    ) -> None:
+        self.delinquency_columns = delinquency_columns
+        self.delinquency_codes = delinquency_codes
+        self.utilisation_column = utilisation_column
+        self.utilisation_max = utilisation_max
+        self.ratio_column = ratio_column
+        self.income_column = income_column
+        self.flag_missing_columns = flag_missing_columns
+        self.delinquency_flag = delinquency_flag
+
+    def _flag_names(self) -> list[str]:
+        """Name every flag this transformer appends, in the order it appends them."""
+        names = []
+        if self.delinquency_columns:
+            
+            names.append(self.delinquency_flag)
+        if self.utilisation_column:
+            names.append(f"{self.utilisation_column}Invalid")
+        names += [f"{column}Missing" for column in self.flag_missing_columns]
+        return names
+
+    def fit(self, X: pd.DataFrame, y: pd.Series | None = None) -> DataQualityCleaner:
+        """Record the column order the transform produces."""
+        frame = _require(X, [], "DataQualityCleaner")
+        self.feature_names_out_ = [*frame.columns, *self._flag_names()]
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Blank out the unusable values and append one flag per rule."""
+        check_is_fitted(self, "feature_names_out_")
+        frame = _require(X, [], "DataQualityCleaner").copy()
+
+        if self.delinquency_columns:
+            columns = list(self.delinquency_columns)
+            coded = frame[columns].isin(list(self.delinquency_codes))
+            frame[self.delinquency_flag] = coded.any(axis=1).astype(int)
+            frame[columns] = frame[columns].mask(coded)
+
+        if self.utilisation_column:
+            invalid = frame[self.utilisation_column] > self.utilisation_max
+            frame[f"{self.utilisation_column}Invalid"] = invalid.astype(int)
+            frame[self.utilisation_column] = frame[self.utilisation_column].mask(invalid)
+
+        if self.ratio_column and self.income_column:
+          
+            frame[self.ratio_column] = frame[self.ratio_column].mask(
+                frame[self.income_column].isna()
+            )
+
+        for column in self.flag_missing_columns:
+            frame[f"{column}Missing"] = frame[column].isna().astype(int)
+
+        return frame[self.feature_names_out_]
+
+    def get_feature_names_out(self, input_features: Sequence[str] | None = None) -> list[str]:
+        """Return the original columns followed by the appended flags."""
+        check_is_fitted(self, "feature_names_out_")
+        return list(self.feature_names_out_)
+
+
+class OutlierClipper(BaseEstimator, TransformerMixin):
+    """Clip the extreme values of the columns that are winsorised."""
 
     def __init__(
         self,
@@ -58,10 +127,9 @@ class OutlierClipper(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        """Apply the learnt limits to a copy of ``X``."""
+        """Transform the frame by clipping the columns to the fitted limits."""
         check_is_fitted(self, "bounds_")
-        # A copy, because modifying the caller's frame would let one fold's
-        # clipping carry over into the next.
+        
         frame = _require(X, self.winsorize_columns, "OutlierClipper").copy()
 
         for column, (lower, upper) in self.bounds_.items():
@@ -79,12 +147,7 @@ class OutlierClipper(BaseEstimator, TransformerMixin):
 
 
 class DelinquencyCombiner(BaseEstimator, TransformerMixin):
-    """Replace the three delinquency counters with their total.
-
-    They correlate above 0.98 with one another, which leaves linear
-    coefficients unstable because the fit can move weight between them almost
-    freely. Tree ensembles do not have that problem and keep the raw counters.
-    """
+    """Replace the three delinquency counters with their total."""
 
     def __init__(
         self, columns: Sequence[str] = (), output_column: str = "TotalLatePayments"
@@ -103,9 +166,9 @@ class DelinquencyCombiner(BaseEstimator, TransformerMixin):
         """Sum the counters, drop them, and return a fixed column order."""
         check_is_fitted(self, "feature_names_out_")
         frame = _require(X, self.columns, "DelinquencyCombiner").copy()
-        frame[self.output_column] = frame[list(self.columns)].sum(axis=1)
-        # The explicit ordering matters: if columns arrived in a different order
-        # at predict time, the model would read the wrong feature in silence.
+        
+        frame[self.output_column] = frame[list(self.columns)].sum(axis=1, min_count=1)
+        
         return frame.drop(columns=list(self.columns))[self.feature_names_out_]
 
     def get_feature_names_out(self, input_features: Sequence[str] | None = None) -> list[str]:
@@ -117,15 +180,26 @@ class DelinquencyCombiner(BaseEstimator, TransformerMixin):
 def preprocessing_steps(
     model_config: ModelConfig, config: Config | None = None
 ) -> list[tuple[str, BaseEstimator]]:
-    """Return the pipeline steps this model needs, in the order they apply.
-
-    The three flags come from the configuration and record why each model is
-    treated differently: trees split on the order of values, so scaling and
-    clipping change nothing for them, and they absorb correlated inputs.
-    """
+    """Return the pipeline steps this model needs, in the order they apply."""
     cfg = config or load_config()
     pre = cfg.preprocessing
-    steps: list[tuple[str, BaseEstimator]] = []
+    quality = cfg.data_quality
+
+
+    steps: list[tuple[str, BaseEstimator]] = [
+        (
+            "quality",
+            DataQualityCleaner(
+                delinquency_columns=pre.delinquency.columns,
+                delinquency_codes=quality.delinquency_codes,
+                utilisation_column=quality.utilisation_column,
+                utilisation_max=quality.utilisation_max,
+                ratio_column=quality.ratio_column,
+                income_column=quality.income_column,
+                flag_missing_columns=quality.flag_missing_columns,
+            ),
+        )
+    ]
 
     if model_config.clip_outliers:
         steps.append(
@@ -152,8 +226,7 @@ def preprocessing_steps(
             )
         )
 
-    # pandas output keeps column names alive through the chain, which the SHAP
-    # step later needs to label its explanations.
+    
     steps.append(
         ("imputer", SimpleImputer(strategy=pre.imputation_strategy).set_output(transform="pandas"))
     )

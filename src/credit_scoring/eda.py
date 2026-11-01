@@ -11,9 +11,6 @@ import pandas as pd
 from credit_scoring.config import Config, load_config
 from credit_scoring.plotting import INK, SURFACE, diverging_cmap, figure, figure_path, series_color
 
-# real values stop at 17 and nothing appears until 96. Thus, the codes 96 and 98 are not counts
-DELINQUENCY_CODES = (96, 98)
-
 
 def save_table(table: pd.DataFrame, name: str, config: Config | None = None) -> Path:
     """Write a table to the reports directory as CSV and return the path."""
@@ -118,6 +115,8 @@ def implausible_value_report(frame: pd.DataFrame, config: Config | None = None) 
     age = cfg.preprocessing.age_column
     low, high = cfg.preprocessing.age_bounds.min, cfg.preprocessing.age_bounds.max
 
+    codes = tuple(cfg.data_quality.delinquency_codes)
+
     rows = []
     if age in frame.columns:
         rows += [
@@ -127,8 +126,8 @@ def implausible_value_report(frame: pd.DataFrame, config: Config | None = None) 
         ]
     for column in cfg.preprocessing.delinquency.columns:
         if column in frame.columns:
-            flagged = int(frame[column].isin(DELINQUENCY_CODES).sum())
-            rows.append({"check": f"{column} in {DELINQUENCY_CODES}", "rows": flagged})
+            flagged = int(frame[column].isin(codes).sum())
+            rows.append({"check": f"{column} in {codes}", "rows": flagged})
 
     table = pd.DataFrame(rows, columns=["check", "rows"])
     table["rows_pct"] = (table["rows"] / len(frame) * 100).round(4)
@@ -174,9 +173,8 @@ def default_rate_by_group(
     delinquency = [c for c in cfg.preprocessing.delinquency.columns if c in frame.columns]
     if delinquency:
         # One flag for the row, because the codes appear in all three counters together.
-        groups[f"delinquency code in {DELINQUENCY_CODES}"] = (
-            frame[delinquency].isin(DELINQUENCY_CODES).any(axis=1)
-        )
+        codes = tuple(cfg.data_quality.delinquency_codes)
+        groups[f"delinquency code in {codes}"] = frame[delinquency].isin(codes).any(axis=1)
     age = cfg.preprocessing.age_column
     if age in frame.columns:
         groups[f"{age} == 0"] = frame[age] == 0
