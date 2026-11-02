@@ -11,14 +11,9 @@ from credit_scoring.plotting import INK, SURFACE, figure, sequential_cmap
 
 
 def operating_point(
-    y_true: pd.Series, y_proba: np.ndarray, cutoff: float, cost_ratio: float
+    y_true: pd.Series, y_proba: np.ndarray, cutoff: float, cost_fp: float, cost_fn: float
 ) -> dict[str, float]:
-    """Return what rejecting every applicant above ``cutoff`` costs and achieves.
-
-    Approval rate and the bad rate among those approved are the two numbers a
-    credit committee reads first: one is the business the policy writes, the
-    other is the risk it keeps.
-    """
+    """Return what rejecting every applicant above ``cutoff`` costs and achieves."""
     predicted = (np.asarray(y_proba) >= cutoff).astype(int)
     tn, fp, fn, tp = confusion_matrix(y_true, predicted).ravel()
     approved = predicted == 0
@@ -31,38 +26,31 @@ def operating_point(
         "precision": tp / (tp + fp) if tp + fp else 0.0,
         "false_positives": int(fp),
         "false_negatives": int(fn),
-        # Expressed in units of one false positive, so the two error types are
-        # comparable on a single scale.
-        "total_cost": fp + cost_ratio * fn,
+        # In currency rather than in units of one error, so the figure can be
+        # read against a budget instead of only against another cut-off.
+        "total_cost": fp * cost_fp + fn * cost_fn,
     }
 
 
 def sensitivity_table(
     y_true: pd.Series, y_proba: np.ndarray, config: Config | None = None
 ) -> pd.DataFrame:
-    """Recompute the operating point across the configured range of cost ratios.
-
-    The ratio of losing a defaulted loan to losing a good customer's margin is
-    an assumption, not a measurement, so the policy is reported across a range
-    rather than at a single value.
-    """
+    """For k from 2 to 10, the cut-off 1 / (k + 1) and the policy it produces."""
     cfg = config or load_config()
+    loss = cfg.threshold.cost_false_negative
+
     rows = [
-        {"cost_ratio": k, **operating_point(y_true, y_proba, 1.0 / (k + 1.0), k)}
+        {"cost_ratio": k, **operating_point(y_true, y_proba, 1.0 / (k + 1.0), loss / k, loss)}
         for k in cfg.threshold.sensitivity_k_grid
     ]
-    return pd.DataFrame(rows)
+    
+    return pd.DataFrame(rows).drop(columns="total_cost")
 
 
 def plot_confusion_matrix(
     y_true: pd.Series, y_proba: np.ndarray, cutoff: float, config: Config | None = None
 ) -> None:
-    """Draw the confusion matrix produced by the chosen cut-off.
-
-    Cells are shaded by their share of the actual class rather than by raw
-    count, because the 26,000 correctly approved applicants would otherwise
-    leave the three cells that matter looking identical.
-    """
+    """Draw the confusion matrix produced by the chosen cut-off."""
     cfg = config or load_config()
     matrix = confusion_matrix(y_true, (np.asarray(y_proba) >= cutoff).astype(int))
     shares = matrix / matrix.sum(axis=1, keepdims=True)

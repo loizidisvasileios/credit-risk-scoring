@@ -147,6 +147,7 @@ class ThresholdConfig(_Section):
 
     loss_given_default: float = Field(gt=0.0, le=1.0)
     net_margin: float = Field(gt=0.0, le=1.0)
+    exposure_at_default: float = Field(gt=0.0)
     sensitivity_k_grid: list[float]
 
     @property
@@ -158,6 +159,16 @@ class ThresholdConfig(_Section):
     def optimal_cutoff(self) -> float:
         """Probability above which rejecting is the cheaper decision."""
         return 1.0 / (self.cost_ratio + 1.0)
+
+    @property
+    def cost_false_positive(self) -> float:
+        """Margin forgone when a good applicant is rejected."""
+        return self.net_margin * self.exposure_at_default
+
+    @property
+    def cost_false_negative(self) -> float:
+        """Capital lost when a bad applicant is approved."""
+        return self.loss_given_default * self.exposure_at_default
 
 
 class ExplainabilityConfig(_Section):

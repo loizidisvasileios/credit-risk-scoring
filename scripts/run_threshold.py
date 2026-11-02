@@ -6,8 +6,6 @@ Usage:
 
 from __future__ import annotations
 
-import pandas as pd
-
 from credit_scoring.config import load_config
 from credit_scoring.data import load_dataset, split_data
 from credit_scoring.threshold import operating_point, plot_confusion_matrix, sensitivity_table
@@ -26,11 +24,17 @@ def main() -> None:
     cutoff = cfg.threshold.optimal_cutoff
     k = cfg.threshold.cost_ratio
 
+    cost_fp = cfg.threshold.cost_false_positive
+    cost_fn = cfg.threshold.cost_false_negative
+
     print(f"LGD {cfg.threshold.loss_given_default}, margin {cfg.threshold.net_margin}")
+    print(f"EAD {cfg.threshold.exposure_at_default:,.0f} (notional)")
+    print(f"rejecting a good applicant costs {cost_fp:,.0f}")
+    print(f"approving a bad one costs        {cost_fn:,.0f}")
     print(f"k = LGD / margin = {k:.3f}")
     print(f"cut-off = 1 / (k + 1) = {cutoff:.4f}\n")
 
-    chosen = operating_point(split.y_test, proba, cutoff, k)
+    chosen = operating_point(split.y_test, proba, cutoff, cost_fp, cost_fn)
     for metric, value in chosen.items():
         print(f"  {metric:<19} {value:,.4f}")
 
@@ -41,7 +45,7 @@ def main() -> None:
 
     directory = cfg.paths.absolute(cfg.paths.tables_dir)
     directory.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(table).to_csv(directory / TABLE_FILE, index=False)
+    table.to_csv(directory / TABLE_FILE, index=False)
     print(f"\nsaved: {directory / TABLE_FILE}")
 
 

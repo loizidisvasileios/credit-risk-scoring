@@ -323,10 +323,20 @@ calibration:
 # LGD of the exposure. Writing k for the cost ratio C_FN / C_FP = LGD / r, the
 # Bayes-optimal threshold is tau* = C_FP / (C_FN + C_FP) = 1 / (k + 1).
 # The exposure at default cancels out under a constant portfolio-level LGD.
+#
+# Three simplifications stand behind the amounts. LGD is the same for every
+# borrower. Margin and loss are not discounted, although one accrues over the
+# life of the loan and the other lands at default. And the dataset holds only
+# applicants who were granted credit, so the policy is fitted on a population
+# that already passed someone else's filter; the rejected have no outcome to
+# learn from, which is the reject inference problem and is not solvable here.
 threshold:
-  loss_given_default: 0.65                    
-  net_margin: 0.13                            
-  sensitivity_k_grid: [2, 3, 4, 5, 6, 7, 8, 9, 10]  
+  loss_given_default: 0.65
+  net_margin: 0.13
+  # Notional: the dataset carries no loan amounts. It scales every reported
+  # amount and, cancelling out of tau*, moves no decision.
+  exposure_at_default: 10000
+  sensitivity_k_grid: [2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 # --- Explainability --------------------------------------------------------
 explainability:
