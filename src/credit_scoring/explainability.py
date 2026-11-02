@@ -13,29 +13,20 @@ from credit_scoring.plotting import SURFACE, apply_style, figure_path
 
 
 def build_explainer(model: Pipeline) -> shap.TreeExplainer:
-    """Build a TreeSHAP explainer for a fitted pipeline's booster.
-
-    Construction walks every tree in the model, so a server scoring one
-    applicant at a time builds this once and reuses it.
-    """
+    """Build a TreeSHAP explainer."""
     return shap.TreeExplainer(model.named_steps["model"])
 
 
 def explain(
     model: Pipeline, X: pd.DataFrame, explainer: shap.TreeExplainer | None = None
 ) -> Explanation:
-    """Return exact TreeSHAP contributions for every row of ``X``.
-
-    The rows are pushed through the pipeline's preprocessing first, because the
-    explainer reads the booster directly and has to be handed the columns the
-    booster was actually trained on.
-    """
+    """Return exact TreeSHAP contributions for every row of ``X``."""
     explainer = explainer or build_explainer(model)
     return explainer(model[:-1].transform(X))
 
 
 def _save(name: str, config: Config) -> None:
-    """Save and close the figure that SHAP has just drawn into."""
+    """Save and close the figure that SHAP has drawn."""
     path = figure_path(name, config)
     path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(path, bbox_inches="tight", facecolor=SURFACE)
@@ -48,22 +39,18 @@ def plot_importance(explanation: Explanation, config: Config | None = None) -> N
     apply_style(cfg)
 
     shap.plots.bar(explanation, max_display=cfg.explainability.max_display, show=False)
-    plt.title("XGBoost SHAP feature importance")
+    
+    plt.title(f"{cfg.models[cfg.selected_model].display_name} SHAP feature importance")
     _save("shap_importance", cfg)
 
 
 def plot_beeswarm(explanation: Explanation, config: Config | None = None) -> None:
-    """Show every applicant as a point, so direction and spread stay visible.
-
-    The bar chart collapses each feature to one number; this keeps the sign of
-    the effect and shows where a feature matters for a few applicants rather
-    than slightly for all of them.
-    """
+    """Show every applicant as a point, so direction and spread stay visible."""
     cfg = config or load_config()
     apply_style(cfg)
 
     shap.plots.beeswarm(explanation, max_display=cfg.explainability.max_display, show=False)
-    plt.title("XGBoost SHAP summary")
+    plt.title(f"{cfg.models[cfg.selected_model].display_name} SHAP summary")
     _save("shap_beeswarm", cfg)
 
 
@@ -79,11 +66,7 @@ def plot_waterfall(
 
 
 def reason_codes(explanation: Explanation, index: int, top_n: int = 3) -> pd.DataFrame:
-    """Return the features that pushed one applicant's risk up the most.
-
-    Only positive contributions are ranked, because a declined applicant has to
-    be told what worked against them, not what was in their favour.
-    """
+    """Return the features that pushed one applicant's risk up the most."""
     frame = pd.DataFrame(
         {
             "feature": explanation.feature_names,

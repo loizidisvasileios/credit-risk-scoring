@@ -17,7 +17,7 @@ TABLE_FILE = "test_model_comparison.csv"
 
 
 def main() -> None:
-    """Fit every configured model once and report its metrics on the held-out test set."""
+    """Fit every configured model once and report its metrics on the test set."""
     cfg = load_config()
     split = split_data(load_dataset(cfg), cfg)
     rows = []
@@ -27,9 +27,7 @@ def main() -> None:
         proba = model.predict_proba(split.X_test)[:, 1]
         rows.append({"model": model_config.display_name, **compute_metrics(split.y_test, proba)})
 
-    # Left in configuration order rather than ranked. A test set sorted by
-    # performance is a leaderboard, and a leaderboard invites choosing from it;
-    # the choice belongs to scripts/run_selection.py, which never sees this set.
+   
     table = pd.DataFrame(rows)
     print(table.round(4).to_string(index=False))
 

@@ -1,4 +1,4 @@
-"""Train the final model and move it to and from disk."""
+"""Train the final model."""
 
 from __future__ import annotations
 
@@ -19,18 +19,14 @@ from credit_scoring.config import Config, load_config
 from credit_scoring.models import build_pipeline
 
 MODEL_FILE = "credit_model.pkl"
+EXPLANATION_MODEL_FILE = "credit_model_uncalibrated.pkl"
 METADATA_FILE = "model_metadata.json"
 
 
 def train_model(
     name: str, X: pd.DataFrame, y: pd.Series, config: Config | None = None
 ) -> BaseEstimator:
-    """Fit ``name`` on the whole training set with its tuned parameters.
-
-    Cross-validation fits models on four fifths of the data and throws them
-    away; this is the one fit that keeps everything and becomes the model that
-    is actually used.
-    """
+    """Fit ``name`` on the training set with its tuned parameters."""
     cfg = config or load_config()
     return build_pipeline(name, cfg).fit(X, y)
 
@@ -42,13 +38,7 @@ def save_model(
     config: Config | None = None,
     filename: str = MODEL_FILE,
 ) -> tuple[Path, Path]:
-    """Write the model next to a metadata file and return both paths.
-
-    The metadata carries what a caller needs but cannot read off the pickle:
-    the feature order the model expects, the decision threshold with the
-    assumptions behind it, and the library versions, because a model pickled by
-    one version of scikit-learn or XGBoost may not load under another.
-    """
+    """Write the model next to a metadata file and return both paths."""
     cfg = config or load_config()
     directory = cfg.paths.absolute(cfg.paths.models_dir)
     directory.mkdir(parents=True, exist_ok=True)
@@ -58,8 +48,7 @@ def save_model(
 
     metadata = {
         "model": name,
-        # Read off the object itself, so the file can never claim a calibration
-        # the saved model does not have.
+        
         "calibrated": isinstance(model, CalibratedClassifierCV),
         "features": features,
         "threshold": cfg.threshold.optimal_cutoff,
@@ -84,6 +73,20 @@ def save_model(
     return model_path, metadata_path
 
 
+def save_explanation_model(model: BaseEstimator, config: Config | None = None) -> Path:
+    """Write the uncalibrated pipeline that SHAP reads.
+
+    No metadata goes with it: the file on disk describes the calibrated one.
+    """
+    cfg = config or load_config()
+    directory = cfg.paths.absolute(cfg.paths.models_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+
+    path = directory / EXPLANATION_MODEL_FILE
+    joblib.dump(model, path)
+    return path
+
+
 def load_model(
     config: Config | None = None, filename: str = MODEL_FILE
 ) -> tuple[BaseEstimator, dict]:
@@ -99,3 +102,16 @@ def load_model(
 
     metadata = json.loads((directory / METADATA_FILE).read_text(encoding="utf-8"))
     return joblib.load(model_path), metadata
+
+
+def load_explanation_model(config: Config | None = None) -> BaseEstimator:
+    """Load the uncalibrated pipeline that SHAP reads."""
+    cfg = config or load_config()
+    path = cfg.paths.absolute(cfg.paths.models_dir) / EXPLANATION_MODEL_FILE
+
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"No explanation model at {path}. Run 'python scripts/run_training.py' first."
+        )
+
+    return joblib.load(path)

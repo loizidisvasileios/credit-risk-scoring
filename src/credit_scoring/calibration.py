@@ -14,13 +14,7 @@ from credit_scoring.plotting import INK_MUTED, figure, series_color
 def calibrate_model(
     X: pd.DataFrame, y: pd.Series, config: Config | None = None
 ) -> CalibratedClassifierCV:
-    """Fit the chosen model wrapped in cross-validated isotonic calibration.
-
-    Each fold fits the model on four fifths of the data and the calibration map
-    on the fifth it never saw, so the map learns to correct out-of-sample
-    probabilities rather than the overconfident ones a model gives on data it
-    was trained on.
-    """
+    """Fit the chosen model wrapped in cross-validated calibration."""
     cfg = config or load_config()
     calibrated = CalibratedClassifierCV(
         build_pipeline(cfg.selected_model, cfg),
@@ -33,12 +27,7 @@ def calibrate_model(
 def reliability_table(
     y_true: pd.Series, y_proba: np.ndarray, config: Config | None = None
 ) -> pd.DataFrame:
-    """Return mean predicted against observed default rate per probability bin.
-
-    Quantile bins hold a comparable number of applicants each, which matters
-    because predicted probabilities pile up near zero and equal-width bins would
-    leave the upper ones nearly empty.
-    """
+    """Return mean predicted against observed default rate per probability bin."""
     cfg = config or load_config()
     frame = pd.DataFrame({"predicted": np.asarray(y_proba), "default": np.asarray(y_true)})
 
@@ -56,8 +45,14 @@ def reliability_table(
         )
         .reset_index()
     )
-    # A positive gap means the model promises fewer defaults than actually occur.
+    
     return table.assign(gap=table["observed"] - table["predicted"])
+
+
+def expected_calibration_error(table: pd.DataFrame) -> float:
+    """Return the weighted average absolute gap between predicted and observed default rate."""
+    weights = table["applicants"] / table["applicants"].sum()
+    return float((weights * table["gap"].abs()).sum())
 
 
 def plot_reliability(

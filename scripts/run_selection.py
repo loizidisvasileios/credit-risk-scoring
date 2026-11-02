@@ -1,4 +1,4 @@
-"""Cross-validate the tuned models on shared folds and record the selection evidence.
+"""Cross-validate the tuned models and justify the choice of the one to use in production.
 
 Usage:
     python scripts/run_selection.py
@@ -18,7 +18,7 @@ PAIRWISE_FILE = "cv_pairwise.csv"
 
 
 def main() -> None:
-    """Score every model on the shared folds and write the selection evidence to disk."""
+    """Score every model on the shared folds."""
     cfg = load_config()
     split = split_data(load_dataset(cfg), cfg)
 
@@ -31,8 +31,6 @@ def main() -> None:
     summary = summarise(per_fold)
     pairs = pairwise(per_fold)
 
-    # Pivoted for reading: one row per fold makes it obvious at a glance whether
-    # a model leads everywhere or only on average.
     folds = per_fold.pivot(index="fold", columns="model", values=SELECTION_METRIC)
     print(f"\n{SELECTION_METRIC} per fold\n{folds.round(4).to_string()}")
     print(f"\nsummary\n{summary.round(4).to_string(index=False)}")

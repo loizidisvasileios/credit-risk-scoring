@@ -18,7 +18,7 @@ from credit_scoring.explainability import (
     plot_waterfall,
     reason_codes,
 )
-from credit_scoring.training import load_model
+from credit_scoring.training import load_explanation_model, load_model
 
 TABLE_FILE = "reason_codes.csv"
 
@@ -27,19 +27,20 @@ def main() -> None:
     """Produce the two global figures, then one breakdown per selected applicant."""
     cfg = load_config()
     model, metadata = load_model(cfg)
+    explanation_model = load_explanation_model(cfg)
     split = split_data(load_dataset(cfg), cfg)
 
     sample = split.X_test.sample(n=cfg.explainability.sample_size, random_state=cfg.random_state)
+    
     proba = model.predict_proba(sample)[:, 1]
     print(f"Explaining {len(sample):,} test applicants")
 
-    explanation = explain(model, sample)
+    explanation = explain(explanation_model, sample)
     plot_importance(explanation, cfg)
     plot_beeswarm(explanation, cfg)
 
     threshold = metadata["threshold"]
-    # Three applicants worth showing: the two extremes, and the borderline case
-    # where the approve or decline decision actually turns.
+    
     selected = {
         "highest_risk": int(proba.argmax()),
         "lowest_risk": int(proba.argmin()),

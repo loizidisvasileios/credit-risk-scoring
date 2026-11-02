@@ -7,8 +7,14 @@ Usage:
 from __future__ import annotations
 
 import pandas as pd
+from scipy.stats import spearmanr
 
-from credit_scoring.calibration import calibrate_model, plot_reliability, reliability_table
+from credit_scoring.calibration import (
+    calibrate_model,
+    expected_calibration_error,
+    plot_reliability,
+    reliability_table,
+)
 from credit_scoring.config import load_config
 from credit_scoring.data import load_dataset, split_data
 from credit_scoring.metrics import compute_metrics
@@ -28,16 +34,29 @@ def main() -> None:
     raw_proba = raw.predict_proba(split.X_test)[:, 1]
     calibrated_proba = calibrated.predict_proba(split.X_test)[:, 1]
 
+    before = reliability_table(split.y_test, raw_proba, cfg)
+    after = reliability_table(split.y_test, calibrated_proba, cfg)
+
     comparison = pd.DataFrame(
         [
-            {"model": "uncalibrated", **compute_metrics(split.y_test, raw_proba)},
-            {"model": cfg.calibration.method, **compute_metrics(split.y_test, calibrated_proba)},
+            {
+                "model": "uncalibrated",
+                **compute_metrics(split.y_test, raw_proba),
+                "ece": expected_calibration_error(before),
+            },
+            {
+                "model": cfg.calibration.method,
+                **compute_metrics(split.y_test, calibrated_proba),
+                "ece": expected_calibration_error(after),
+            },
         ]
     )
     print(f"\n{comparison.round(4).to_string(index=False)}")
 
-    before = reliability_table(split.y_test, raw_proba, cfg)
-    after = reliability_table(split.y_test, calibrated_proba, cfg)
+   
+    rank_correlation = spearmanr(raw_proba, calibrated_proba).statistic
+    print(f"\nrank correlation, raw vs calibrated: {rank_correlation:.6f}")
+
     print(f"\nuncalibrated\n{before.round(4).to_string(index=False)}")
     print(f"\n{cfg.calibration.method}\n{after.round(4).to_string(index=False)}")
 
