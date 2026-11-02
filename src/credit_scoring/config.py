@@ -15,7 +15,7 @@ DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "config.yaml"
 
 
 class _Section(BaseModel):
-    """Base for every config section: unknown keys are errors, values are read-only."""
+    """Base for every config section: frozen, no extra fields, and all fields are required."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -28,7 +28,7 @@ class ProjectInfo(_Section):
 
 
 class Paths(_Section):
-    """Locations of the dataset and of generated artefacts."""
+    """Locations of the dataset and of where to store outputs."""
 
     raw_data: Path
     models_dir: Path
@@ -51,7 +51,7 @@ class DataConfig(_Section):
 
 
 class WinsorizeConfig(_Section):
-    """Quantiles at which heavy-tailed features are capped."""
+    """Quantiles at which features with heavy tails are capped."""
 
     columns: list[str]
     lower_quantile: float = Field(ge=0.0, lt=1.0)
@@ -75,7 +75,7 @@ class AgeBounds(_Section):
 
 
 class DelinquencyConfig(_Section):
-    """The three near-collinear delinquency counters and their aggregate."""
+    """The three delinquency counters and their aggregate."""
 
     columns: list[str]
     output_column: str
@@ -111,14 +111,14 @@ class CrossValidationConfig(_Section):
 
 
 class TuningConfig(_Section):
-    """Search budget for Optuna."""
+    """Optuna hyperparameter search settings for each model."""
 
     n_trials: int = Field(ge=1)
     direction: Literal["maximize", "minimize"]
 
 
 class ModelConfig(_Section):
-    """One estimator: the preprocessing it needs and its parameters."""
+    """Settings for a single model."""
 
     display_name: str
     scale_features: bool
@@ -136,7 +136,6 @@ class ModelConfig(_Section):
 class CalibrationConfig(_Section):
     """Probability calibration settings for the production model."""
 
-    model: str
     method: Literal["isotonic", "sigmoid"]
     cv: int = Field(ge=2)
     n_bins: int = Field(ge=2)
@@ -202,6 +201,7 @@ class Config(_Section):
 
     project: ProjectInfo
     random_state: int
+    selected_model: str
     paths: Paths
     data: DataConfig
     data_quality: DataQualityConfig
@@ -216,10 +216,10 @@ class Config(_Section):
     plotting: PlottingConfig
 
     @model_validator(mode="after")
-    def _check_calibrated_model_exists(self) -> Config:
-        if self.calibration.model not in self.models:
+    def _check_selected_model_exists(self) -> Config:
+        if self.selected_model not in self.models:
             raise ValueError(
-                f"calibration.model is {self.calibration.model!r}, which is not one "
+                f"selected_model is {self.selected_model!r}, which is not one "
                 f"of the defined models: {sorted(self.models)}"
             )
         return self

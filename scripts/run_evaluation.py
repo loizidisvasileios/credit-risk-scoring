@@ -27,7 +27,10 @@ def main() -> None:
         proba = model.predict_proba(split.X_test)[:, 1]
         rows.append({"model": model_config.display_name, **compute_metrics(split.y_test, proba)})
 
-    table = pd.DataFrame(rows).sort_values("pr_auc", ascending=False, ignore_index=True)
+    # Left in configuration order rather than ranked. A test set sorted by
+    # performance is a leaderboard, and a leaderboard invites choosing from it;
+    # the choice belongs to scripts/run_selection.py, which never sees this set.
+    table = pd.DataFrame(rows)
     print(table.round(4).to_string(index=False))
 
     directory = cfg.paths.absolute(cfg.paths.tables_dir)

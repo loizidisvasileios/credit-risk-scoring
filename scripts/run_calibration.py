@@ -19,7 +19,7 @@ def main() -> None:
     """Fit both versions of the model and report whether calibration changes anything."""
     cfg = load_config()
     split = split_data(load_dataset(cfg), cfg)
-    name = cfg.calibration.model
+    name = cfg.selected_model
 
     print(f"Calibrating {name} with {cfg.calibration.method} regression, cv={cfg.calibration.cv}")
     raw = train_model(name, split.X_train, split.y_train, cfg)

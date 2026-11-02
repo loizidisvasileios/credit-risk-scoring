@@ -17,6 +17,15 @@ project:
 # --- Global reproducibility ------------------------------------------------
 random_state: 42
 
+# --- Model that goes to production -----------------------------------------
+# Chosen on cross-validated PR-AUC over the 5 shared folds; evidence in
+# results/selection/. LightGBM leads XGBoost by 0.0016 (5.3 standard errors,
+# ahead in 5 of 5 folds) and Random Forest by 0.0045. The margin is small
+# enough to be commercially immaterial but too consistent to be noise.
+# Brier is the worst of the three trees here; calibration fixes that, and
+# being a monotone map it cannot disturb the ranking this choice rests on.
+selected_model: lightgbm
+
 # --- Filesystem layout -----------------------------------------------------
 # All paths are relative to the repository root and resolved at load time.
 paths:
@@ -302,7 +311,6 @@ models:
 # Boosted trees optimise ranking, not calibration, so their raw scores are not
 # usable as probabilities of default. Isotonic regression corrects this.
 calibration:
-  model: xgboost                              
   method: isotonic                            
   cv: 5                                       
                                               

@@ -23,7 +23,7 @@ def calibrate_model(
     """
     cfg = config or load_config()
     calibrated = CalibratedClassifierCV(
-        build_pipeline(cfg.calibration.model, cfg),
+        build_pipeline(cfg.selected_model, cfg),
         method=cfg.calibration.method,
         cv=cfg.calibration.cv,
     )

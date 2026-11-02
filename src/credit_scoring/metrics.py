@@ -66,12 +66,16 @@ def cross_validate_model(
 
 
 def compare_models(X: pd.DataFrame, y: pd.Series, config: Config | None = None) -> pd.DataFrame:
-    """Cross-validate every configured model and return all metrics per model.
+    """Cross-validate every configured model and return one row per model per fold.
 
     The fold loop is written out instead of delegating to ``cross_val_score``
     because that helper discards the predicted probabilities and returns only
     the single score it was asked for. Keeping the probabilities lets every
     metric be computed from the same predictions.
+
+    Scores are left unaggregated. Averaging them here would discard the spread
+    across folds, which is the only thing that shows whether a gap between two
+    models is larger than the gap between two folds of the same model.
     """
     cfg = config or load_config()
     splitter = folds(cfg)
@@ -79,24 +83,18 @@ def compare_models(X: pd.DataFrame, y: pd.Series, config: Config | None = None) 
 
     for name, model_config in cfg.models.items():
         pipeline = build_pipeline(name, cfg)
-        per_fold = []
 
-        for train_index, valid_index in splitter.split(X, y):
+        for fold, (train_index, valid_index) in enumerate(splitter.split(X, y), start=1):
             # A fresh clone per fold keeps preprocessing learned on the training
             # part only, with nothing carried over from the previous fold.
             fitted = clone(pipeline).fit(X.iloc[train_index], y.iloc[train_index])
             proba = fitted.predict_proba(X.iloc[valid_index])[:, 1]
-            per_fold.append(compute_metrics(y.iloc[valid_index], proba))
+            rows.append(
+                {
+                    "model": model_config.display_name,
+                    "fold": fold,
+                    **compute_metrics(y.iloc[valid_index], proba),
+                }
+            )
 
-        scores = pd.DataFrame(per_fold)
-        rows.append(
-            {
-                "model": model_config.display_name,
-                **scores.mean().to_dict(),
-                # Population standard deviation, matching the spread recorded
-                # for each tuning trial.
-                "pr_auc_std": scores["pr_auc"].std(ddof=0),
-            }
-        )
-
-    return pd.DataFrame(rows).sort_values("pr_auc", ascending=False, ignore_index=True)
+    return pd.DataFrame(rows)
