@@ -1,0 +1,18 @@
+# Everything the image does not need. Keeping the build context small matters
+# because it is sent to the Docker daemon in full before the build starts.
+.git
+.venv
+venv
+__pycache__
+*.pyc
+*.egg-info
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# Mounted at run time rather than baked in, or simply not used by the service.
+data
+models
+reports
+results
+notebooks

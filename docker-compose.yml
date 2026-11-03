@@ -1,0 +1,7 @@
+services:
+  scoring:
+    build: .
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./models:/srv/models:ro

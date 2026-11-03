@@ -17,12 +17,15 @@ import requests
 from dash import Dash, Input, Output, State, dcc, html
 
 API_URL = os.environ.get("CREDIT_API_URL", "http://127.0.0.1:8000")
+
+HOST = os.environ.get("CREDIT_DASHBOARD_HOST", "127.0.0.1")
+PORT = int(os.environ.get("CREDIT_DASHBOARD_PORT", "8050"))
 REQUEST_TIMEOUT = 10
 
 APPROVE_COLOR = "#1baf7a"
 REJECT_COLOR = "#eb6834"
 
-# Field name as the API expects it, label, default value and input step.
+# Field name as the API expects it.
 FIELDS = [
     ("RevolvingUtilizationOfUnsecuredLines", "Revolving utilisation", 0.36, 0.01),
     ("age", "Age", 55, 1),
@@ -133,4 +136,4 @@ def score(_: int, *values: float) -> list:
 
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(host=HOST, port=PORT, debug=False)
