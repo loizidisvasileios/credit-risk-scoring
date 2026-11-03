@@ -2,31 +2,25 @@
 
 Probability-of-default modelling on the *Give Me Some Credit* dataset, from
 exploratory analysis through hyperparameter search to a served scoring API with
-per-applicant explanations.
+per-applicant decline reasons, using SHAP values.
 
-Four models are compared under an identical cross-validation protocol, the
-winner is selected before the test set is opened, the accept/reject cut-off is
-derived from the cost of the two error types rather than chosen by hand, and
-every declined application comes with the reasons behind it.
+Four models are compared. Logistic Regression, Random Forest, XGBoost, LightGBM
+
 
 ---
 
 ## Results
 
-Held-out test set, 30,000 applications never used in any decision:
+Test set, 30,000 applications:
 
 | Model | PR-AUC | ROC-AUC | Gini | KS | Brier |
 |---|---|---|---|---|---|
-| **XGBoost** | **0.4105** | **0.8699** | **0.7398** | 0.5818 | **0.0485** |
-| LightGBM | 0.4098 | 0.8696 | 0.7392 | **0.5833** | 0.0486 |
-| Random Forest | 0.4051 | 0.8673 | 0.7346 | 0.5793 | 0.0489 |
-| Logistic Regression | 0.3473 | 0.8364 | 0.6729 | 0.5163 | 0.1656 |
+| **LightGBM** | **0.4082** | **0.8693** | **0.7386** | **0.5833** | 0.0780 |
+| XGBoost | 0.4078 | 0.8688 | 0.7377 | 0.5807 | 0.0687 |
+| Random Forest | 0.4046 | 0.8669 | 0.7338 | 0.5792 | 0.0489 |
+| Logistic Regression | 0.3832 | 0.8602 | 0.7203 | 0.5621 | 0.1466 |
 
-PR-AUC is the headline metric: only 6.68% of applications default, so a measure
-that ignores the easy negatives is the one that reflects the task.
-
-At the derived cut-off of 0.1667 the policy approves **89.9%** of applications
-and carries a **3.26%** default rate among those approved.
+PR-AUC leads because only 6.68% of applications default.
 
 <p align="center">
   <img src="docs/assets/confusion_matrix.png" width="420" alt="Confusion matrix at the cost-based cut-off">
@@ -37,19 +31,13 @@ and carries a **3.26%** default rate among those approved.
 
 ## How the model was chosen
 
-The 150,000 applications are split 80/20, stratified on the target. **The test
-set takes no part in any decision** — not in the exploratory analysis, not in
-the outlier bounds or imputation medians, not in tuning, and not in model
-selection.
-
-Inside the training set, 5-fold stratified cross-validation answers two
-questions:
+The 150,000 applications are split 80/20, stratified on the target.
 
 ```
 150,000 applications
    |
    +-- 120,000 TRAINING -------------------------+     30,000 TEST
-   |                                             |     (sealed)
+   |                                             |     
    |  [1] which hyperparameters                  |
    |      Optuna, 30 trials x 4 models x 5 folds |
    |      = 600 fits, all discarded              |
@@ -57,50 +45,61 @@ questions:
    |  [2] which model                            |
    |      4 tuned configurations, same folds     |
    |      = 20 fits, all discarded               |
-   |      -> XGBoost                             |
+   |      -> LightGBM                            |
    |                                             |
    |  [3] one fit on all 120,000 -> the model    |
    +---------------------------------------------+
                                                  |
-                                   one measurement +--> reported above
+                                   
 ```
 
-Cross-validation here is a measuring instrument, not a training step: every
-model fitted inside a fold is thrown away.
+Cross-validation:
 
-**XGBoost and LightGBM tied.** Their cross-validated PR-AUC differed by 0.0004,
-less than one standard error, and they swapped places depending on the metric.
-The tie was broken on reproducibility, not performance. The choice was locked in
-before the test set was read, and the test result — which happens to agree — did
-not influence it.
+| | mean PR-AUC | standard error |
+|---|---|---|
+| LightGBM | 0.4034 | 0.0023 |
+| XGBoost | 0.4017 | 0.0024 |
+| Random Forest | 0.3988 | 0.0014 |
+| Logistic Regression | 0.3715 | 0.0034 |
 
-### Calibration was measured, then dropped
+---
 
-The decision rule below needs probabilities that are right in level, not merely
-in rank, so isotonic calibration was fitted and compared against the raw model.
+## Calibration
 
-| | PR-AUC | Brier | Mean predicted probability |
-|---|---|---|---|
-| Uncalibrated | 0.4105 | 0.0485 | 0.0676 |
-| Isotonic | 0.4111 | 0.0485 | 0.0676 |
+The cut-off below needs probabilities that are right in level, so isotonic calibration is fitted inside a 5-fold wrapper: each fold
+learns its map on the part of the data its model never saw.
 
-The tuned model already predicted an average default probability of 0.0676
-against an observed rate of 0.0668, a 1.2% discrepancy, because the search
-settled on `scale_pos_weight ≈ 1.0` and never distorted the probability scale.
-Calibration left the Brier score unchanged and was therefore dropped, with the
-experiment kept in the repository as the evidence.
+| | PR-AUC | KS | Brier | ECE |
+|---|---|---|---|---|
+| Uncalibrated | 0.4082 | 0.5833 | 0.0780 | 0.1294 |
+| Isotonic | 0.4078 | 0.5818 | 0.0486 | 0.0026 |
+
 
 <p align="center">
   <img src="docs/assets/calibration_curve.png" width="520" alt="Reliability curve before and after isotonic calibration">
 </p>
+
+The calibrated model decides;
+`credit_model_uncalibrated.pkl` exists because TreeSHAP needs one booster while the
+calibrated model is an ensemble of five. Being monotone, the map between them
+preserves the ordering the explanations are about.
+
+---
+
+## Values that are not measurements
+
+The delinquency counters stop at 17 and then have go to 96 and 98; revolving
+utilisation reaches 50,708; `DebtRatio` holds a raw amount rather than a ratio
+wherever income is missing. These are values that measure nothing, so they are handled separately from outliers:
+
+
 
 ---
 
 ## The decision cut-off
 
 Rejecting a sound applicant forgoes the margin `r`; approving one who defaults
-loses `LGD` of the exposure. Comparing the expected cost of each decision for an
-applicant with predicted probability `p`:
+loses `LGD` of the exposure. For an applicant with predicted probability `p`:
 
 ```
 approve:  p * LGD * EAD          reject:  (1 - p) * r * EAD
@@ -108,12 +107,9 @@ approve:  p * LGD * EAD          reject:  (1 - p) * r * EAD
 
 Rejecting is cheaper once `p > 1 / (k + 1)`, where `k = LGD / r`. The exposure
 cancels, so the cut-off does not depend on loan size. With `LGD = 0.65` and
-`r = 0.13`, `k = 5` and the cut-off is **0.1667**.
+`r = 0.13`, `k = 5` and the cut-off is 0.1667.
 
-`k` is an assumption rather than a measurement — the dataset carries no loan
-amounts or recoveries — so the policy is published across `k = 2` to `k = 10` in
-`reports/tables/threshold_sensitivity.csv`. Approval rate falls from 95.2% to
-81.9% across that range.
+At that cut-off the policy approves 89.4% of applications and carries a 3.16% default rate among those approved.
 
 ---
 
@@ -126,12 +122,6 @@ SHAP contributions come from `TreeExplainer`, exact rather than sampled, over a
   <img src="docs/assets/shap_beeswarm.png" width="760" alt="SHAP summary plot">
 </p>
 
-Revolving utilisation separates applicants on a continuous scale, while the
-three delinquency counters act as near-switches: their absence gives everyone a
-small, uniform benefit, their presence penalises heavily and unevenly.
-
-The same values drive the decline reasons returned by the API, so the
-explanation a credit analyst reads is the one the model actually used.
 
 ---
 
@@ -145,60 +135,54 @@ pip install -e ".[app,dev,data]"
 python scripts/download_data.py
 ```
 
-The stages run in order; each writes its results to `reports/` and prints them.
+The stages run in order and each one prints its results as well as writing them:
 
-| Step | Command | Produces | Time |
-|---|---|---|---|
-| 1 | `python scripts/run_eda.py` | 25 figures, 7 tables | 1 min |
-| 2 | `python scripts/run_tuning.py` | Trial history, tuned parameters written back to the config | 85 min |
-| 3 | `python scripts/run_comparison.py` | Cross-validated comparison of the four models | 12 min |
-| 4 | `python scripts/run_evaluation.py` | Test metrics for the four models | 5 min |
-| 5 | `python scripts/run_calibration.py` | Calibration experiment and reliability curve | 7 min |
-| 6 | `python scripts/run_training.py` | `models/credit_model.pkl` and its metadata | 2 min |
-| 7 | `python scripts/run_explainability.py` | SHAP figures and reason codes | 2 min |
-| 8 | `python scripts/run_threshold.py` | Confusion matrix and sensitivity analysis | 1 min |
+| Step | Command | Produces |
+|---|---|---|
+| 1 | `python scripts/run_eda.py` | Figures and tables |
+| 2 | `python scripts/run_tuning.py` | Tuned parameters written back to the config |
+| 3 | `python scripts/run_selection.py` | Per-fold scores and the pairwise differences behind the choice |
+| 4 | `python scripts/run_evaluation.py` | Test metrics for the four models |
+| 5 | `python scripts/run_calibration.py` | Calibration measurement and reliability curve |
+| 6 | `python scripts/run_training.py` | The calibrated model, the uncalibrated and the metadata |
+| 7 | `python scripts/run_explainability.py` | SHAP figures and reason codes |
+| 8 | `python scripts/run_threshold.py` | Confusion matrix and cost-ratio sensitivity |
 
-Steps 7 and 8 load the saved model, so step 6 must have run.
-
-Hyperparameters are not hard-coded: step 2 writes them into `config/config.yaml`
-with a dated provenance comment, and the full trial history is kept under
-`results/tuning/` so every published number can be traced to the run that
-produced it.
 
 ---
 
-## Serving
+## App
 
 The scoring logic lives in `app/service.py`. The API exposes it over HTTP and
 the dashboard is a pure client — it holds no model and makes no decisions,
 exactly as a production front end would not.
 
 ```bash
-uvicorn app.api:app --port 8000     # first terminal
+uvicorn app.api:app --port 8000    # first terminal
 python app/dashboard.py            # second terminal
 ```
 
 | Address | |
 |---|---|
-| `http://127.0.0.1:8050` | Dashboard |
+| `http://127.0.0.1:8050` | Dashboard | 
 | `http://127.0.0.1:8000/docs` | Interactive API documentation, generated from the schemas |
 
 `POST /predict` takes an application and returns:
 
 ```json
 {
-  "probability": 0.1664,
-  "score": 534,
-  "decision": "approve",
+  "probability": 0.1709,
+  "score": 533,
+  "decision": "reject",
   "threshold": 0.1667,
-  "reason_codes": []
+  "reason_codes": [
+    {"feature": "NumberOfTime30-59DaysPastDueNotWorse", "value": 3.0, "contribution": 1.7465},
+    {"feature": "DebtRatio", "value": 0.648, "contribution": 0.2260},
+    {"feature": "MonthlyIncome", "value": 3325.0, "contribution": 0.1321}
+  ]
 }
 ```
 
-The score is the points scale lenders publish: it rises as risk falls, and every
-20 points doubles the odds of repayment. Reason codes are returned only for a
-decline, since an approval has none to give. A scored application takes
-70–150 ms, the longer path being the one that computes SHAP values.
 
 ```bash
 pytest
@@ -209,28 +193,24 @@ pytest
 ## Repository layout
 
 ```
-config/config.yaml   Every constant the pipeline uses, validated on load
-src/credit_scoring/  Importable package: 12 modules, no entry points
+config/config.yaml   Every constant the pipeline uses
+src/credit_scoring/  Importable package: 13 modules, no entry points
 scripts/             One command-line entry point per stage
-app/                 service.py, the API over it, and the dashboard over that
-tests/               API test suite
-results/tuning/      Full Optuna trial history, tracked in version control
+app/                 service.py, the API and the dashboard
+tests/               API test
+results/             Trial history and selection evidence
 docs/assets/         Figures shown in this README
-data/ models/ reports/   Generated locally, not tracked
+data/ models/ reports/   Generated locally.
 ```
 
-Configuration is validated by pydantic on load, so a malformed value fails
-immediately with the field named, rather than surfacing as a strange result
-forty minutes into a tuning run.
+Configuration is validated by pydantic on load.
 
 ---
 
 ## Data
 
 *Give Me Some Credit*, Kaggle, 2011. 150,000 applications, 10 features, binary
-target marking serious delinquency within two years. The competition rules must
-be accepted on Kaggle before the download script can fetch it.
-
+target marking serious delinquency within two years.
 ## Licence
 
 Released under the [MIT License](LICENSE).

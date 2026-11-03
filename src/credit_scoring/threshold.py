@@ -26,8 +26,6 @@ def operating_point(
         "precision": tp / (tp + fp) if tp + fp else 0.0,
         "false_positives": int(fp),
         "false_negatives": int(fn),
-        # In currency rather than in units of one error, so the figure can be
-        # read against a budget instead of only against another cut-off.
         "total_cost": fp * cost_fp + fn * cost_fn,
     }
 
@@ -43,7 +41,6 @@ def sensitivity_table(
         {"cost_ratio": k, **operating_point(y_true, y_proba, 1.0 / (k + 1.0), loss / k, loss)}
         for k in cfg.threshold.sensitivity_k_grid
     ]
-    
     return pd.DataFrame(rows).drop(columns="total_cost")
 
 
