@@ -1,7 +1,9 @@
 # Credit Risk Scoring
 
-Probability-of-default modelling on the *Give Me Some Credit* dataset. Four models are compared. Logistic Regression, Random Forest, XGBoost, LightGBM. The model with the best performance is served through an API with
-per-applicant decline reasons, using SHAP values.
+Probability-of-default modelling on the *Give Me Some Credit* dataset. Four
+models are compared: Logistic Regression, Random Forest, XGBoost and LightGBM.
+The best one is served through an API with per-applicant decline reasons, using
+SHAP values.
 
 
 
@@ -13,12 +15,12 @@ Test set, 30,000 applications:
 
 | Model | PR-AUC | ROC-AUC | Gini | KS | Brier |
 |---|---|---|---|---|---|
-| LightGBM| 0.4082 | 0.8693 | 0.7386 | 0.5833 | 0.0780 |
+| LightGBM | 0.4082 | 0.8693 | 0.7386 | 0.5833 | 0.0780 |
 | XGBoost | 0.4078 | 0.8688 | 0.7377 | 0.5807 | 0.0687 |
 | Random Forest | 0.4046 | 0.8669 | 0.7338 | 0.5792 | 0.0489 |
 | Logistic Regression | 0.3832 | 0.8602 | 0.7203 | 0.5621 | 0.1466 |
 
-PR-AUC is the main metric
+PR-AUC is the main metric.
 
 <p align="center">
   <img src="docs/assets/confusion_matrix.png" width="420" alt="Confusion matrix at the cost-based cut-off">
@@ -29,10 +31,9 @@ PR-AUC is the main metric
 
 ## Cross-validation for model decision
 
-The 150,000 applications are split 80/20, stratified on the target.
-
-
-Cross-validation:
+The 150,000 applications are split 80/20, stratified on the target. Both the
+hyperparameters and the model are chosen by 5-fold cross-validation inside the
+training part, so the test set takes no part in the choice:
 
 | | mean PR-AUC | standard error |
 |---|---|---|
@@ -59,15 +60,15 @@ Isotonic calibration is fitted inside a 5-fold wrapper:
 
 The calibrated model decides;
 `credit_model_uncalibrated.pkl` exists because TreeSHAP needs one booster while the
-calibrated model is an ensemble of five. Isotonic regrerssion is based on a monotonic function, so we are able to do that.
+calibrated model is an ensemble of five. Isotonic regression is based on a monotonic function, so we are able to do that.
 
 ---
 
 ## Values that are not true measurements
 
-The delinquency counters stop at 17 and go to 96 and 98; revolving
+The delinquency counters stop at 17 and then go to 96 and 98; revolving
 utilisation reaches 50,708; `DebtRatio` holds a raw amount rather than a ratio
-wherever income is missing. These are values that measure nothing, so they are handled separately from outliers:
+wherever income is missing. These are values that measure nothing, so they are handled separately from outliers.
 
 
 
@@ -105,7 +106,7 @@ of the test set.
 ## Running the pipeline
 
 ```bash
-git clone https://github.com/<your-account>/credit-risk-scoring.git
+git clone https://github.com/loizidisvasileios-code/credit-risk-scoring.git
 cd credit-risk-scoring
 python -m venv .venv && .venv/Scripts/activate      # Linux/macOS: source .venv/bin/activate
 pip install -e ".[app,dev,data]"
@@ -130,7 +131,8 @@ The stages run in order:
 
 ## App
 
-
+The service needs a trained model, so it runs once the pipeline has produced
+one. Below is that service running.
 
 <p align="center">
   <img src="docs/assets/dashboard.png" width="760" alt="The dashboard declining an application and naming the three largest contributions to that decision">
@@ -143,7 +145,7 @@ docker compose up --build
 ```
 
 `models/` is mounted read only rather than copied into the image, so the
-pipeline has to have been run once before the container can score anything.
+container picks up whatever the last run wrote.
 
 The dashboard is then at `http://127.0.0.1:7860`.
 
@@ -193,6 +195,9 @@ Configuration is validated by pydantic on load.
 
 *Give Me Some Credit*, Kaggle, 2011. 150,000 applications, 10 features, binary
 target marking serious delinquency within two years.
+
+---
+
 ## Licence
 
 Released under the [MIT License](LICENSE).
