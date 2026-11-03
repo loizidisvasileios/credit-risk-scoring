@@ -1,10 +1,8 @@
 # Credit Risk Scoring
 
-Probability-of-default modelling on the *Give Me Some Credit* dataset, from
-exploratory analysis through hyperparameter search to a served scoring API with
+Probability-of-default modelling on the *Give Me Some Credit* dataset. Four models are compared. Logistic Regression, Random Forest, XGBoost, LightGBM. The model with the best performance is served through an API with
 per-applicant decline reasons, using SHAP values.
 
-Four models are compared. Logistic Regression, Random Forest, XGBoost, LightGBM
 
 
 ---
@@ -15,12 +13,12 @@ Test set, 30,000 applications:
 
 | Model | PR-AUC | ROC-AUC | Gini | KS | Brier |
 |---|---|---|---|---|---|
-| **LightGBM** | **0.4082** | **0.8693** | **0.7386** | **0.5833** | 0.0780 |
+| LightGBM| 0.4082 | 0.8693 | 0.7386 | 0.5833 | 0.0780 |
 | XGBoost | 0.4078 | 0.8688 | 0.7377 | 0.5807 | 0.0687 |
 | Random Forest | 0.4046 | 0.8669 | 0.7338 | 0.5792 | 0.0489 |
 | Logistic Regression | 0.3832 | 0.8602 | 0.7203 | 0.5621 | 0.1466 |
 
-PR-AUC leads because only 6.68% of applications default.
+PR-AUC is the main metric
 
 <p align="center">
   <img src="docs/assets/confusion_matrix.png" width="420" alt="Confusion matrix at the cost-based cut-off">
@@ -29,29 +27,10 @@ PR-AUC leads because only 6.68% of applications default.
 
 ---
 
-## How the model was chosen
+## Cross-validation for model decision
 
 The 150,000 applications are split 80/20, stratified on the target.
 
-```
-150,000 applications
-   |
-   +-- 120,000 TRAINING -------------------------+     30,000 TEST
-   |                                             |     
-   |  [1] which hyperparameters                  |
-   |      Optuna, 30 trials x 4 models x 5 folds |
-   |      = 600 fits, all discarded              |
-   |                                             |
-   |  [2] which model                            |
-   |      4 tuned configurations, same folds     |
-   |      = 20 fits, all discarded               |
-   |      -> LightGBM                            |
-   |                                             |
-   |  [3] one fit on all 120,000 -> the model    |
-   +---------------------------------------------+
-                                                 |
-                                   
-```
 
 Cross-validation:
 
@@ -66,8 +45,7 @@ Cross-validation:
 
 ## Calibration
 
-The cut-off below needs probabilities that are right in level, so isotonic calibration is fitted inside a 5-fold wrapper: each fold
-learns its map on the part of the data its model never saw.
+Isotonic calibration is fitted inside a 5-fold wrapper:
 
 | | PR-AUC | KS | Brier | ECE |
 |---|---|---|---|---|
@@ -81,14 +59,13 @@ learns its map on the part of the data its model never saw.
 
 The calibrated model decides;
 `credit_model_uncalibrated.pkl` exists because TreeSHAP needs one booster while the
-calibrated model is an ensemble of five. Being monotone, the map between them
-preserves the ordering the explanations are about.
+calibrated model is an ensemble of five. Isotonic regrerssion is based on a monotonic function, so we are able to do that.
 
 ---
 
-## Values that are not measurements
+## Values that are not true measurements
 
-The delinquency counters stop at 17 and then have go to 96 and 98; revolving
+The delinquency counters stop at 17 and go to 96 and 98; revolving
 utilisation reaches 50,708; `DebtRatio` holds a raw amount rather than a ratio
 wherever income is missing. These are values that measure nothing, so they are handled separately from outliers:
 
@@ -98,25 +75,25 @@ wherever income is missing. These are values that measure nothing, so they are h
 
 ## The decision cut-off
 
-Rejecting a sound applicant forgoes the margin `r`; approving one who defaults
-loses `LGD` of the exposure. For an applicant with predicted probability `p`:
+The threshold is decided by the difference between the cost of any decision.
+Rejection of a good applicant: The cost is the margin `r`, times the Exposure At Default
+Approval of a bad applicant: The cost is the Loss Given Default, times the Exposure At Default.
+At a predicted probability `p`:
 
 ```
 approve:  p * LGD * EAD          reject:  (1 - p) * r * EAD
 ```
 
-Rejecting is cheaper once `p > 1 / (k + 1)`, where `k = LGD / r`. The exposure
-cancels, so the cut-off does not depend on loan size. With `LGD = 0.65` and
-`r = 0.13`, `k = 5` and the cut-off is 0.1667.
-
-At that cut-off the policy approves 89.4% of applications and carries a 3.16% default rate among those approved.
+`EAD` cancels, so one cut-off serves every loan size: reject above
+`1 / (k + 1)`, with `k = LGD / r`. Here `k = 0.65 / 0.13 = 5` and the cut-off
+is 0.1667 — 89.4% approved, 3.16% defaults among them.
 
 ---
 
 ## Explainability
 
-SHAP contributions come from `TreeExplainer`, exact rather than sampled, over a
-5,000-application sample of the test set.
+SHAP contributions come from `TreeExplainer`, over a 5,000-application sample
+of the test set.
 
 <p align="center">
   <img src="docs/assets/shap_beeswarm.png" width="760" alt="SHAP summary plot">
@@ -135,7 +112,7 @@ pip install -e ".[app,dev,data]"
 python scripts/download_data.py
 ```
 
-The stages run in order and each one prints its results as well as writing them:
+The stages run in order:
 
 | Step | Command | Produces |
 |---|---|---|
@@ -153,19 +130,22 @@ The stages run in order and each one prints its results as well as writing them:
 
 ## App
 
-The scoring logic lives in `app/service.py`. The API exposes it over HTTP and
-the dashboard is a pure client — it holds no model and makes no decisions,
-exactly as a production front end would not.
+
+
+<p align="center">
+  <img src="docs/assets/dashboard.png" width="760" alt="The dashboard declining an application and naming the three largest contributions to that decision">
+</p>
+
+The API and the dashboard run together in one container:
 
 ```bash
-uvicorn app.api:app --port 8000    # first terminal
-python app/dashboard.py            # second terminal
+docker compose up --build
 ```
 
-| Address | |
-|---|---|
-| `http://127.0.0.1:8050` | Dashboard | 
-| `http://127.0.0.1:8000/docs` | Interactive API documentation, generated from the schemas |
+`models/` is mounted read only rather than copied into the image, so the
+pipeline has to have been run once before the container can score anything.
+
+The dashboard is then at `http://127.0.0.1:7860`.
 
 `POST /predict` takes an application and returns:
 
@@ -183,6 +163,7 @@ python app/dashboard.py            # second terminal
 }
 ```
 
+Tests cover the schemas, the cut-off and the reason codes:
 
 ```bash
 pytest
@@ -197,8 +178,9 @@ config/config.yaml   Every constant the pipeline uses
 src/credit_scoring/  Importable package: 13 modules, no entry points
 scripts/             One command-line entry point per stage
 app/                 service.py, the API and the dashboard
+Dockerfile           Runs both of them as one service
 tests/               API test
-results/             Trial history and selection evidence
+results/             Trial history
 docs/assets/         Figures shown in this README
 data/ models/ reports/   Generated locally.
 ```
