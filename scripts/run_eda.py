@@ -31,7 +31,7 @@ from credit_scoring.eda import (
 def main() -> None:
     """Describe the training set, saving every table and figure to the reports directory."""
     cfg = load_config()
-    
+
     frame = split_data(load_dataset(cfg), cfg).training_frame()
 
     tables = {
@@ -59,7 +59,7 @@ def main() -> None:
         print(f"saved: {path}")
 
     features = [column for column in frame.columns if column != cfg.data.target]
-    
+
     skewed = cfg.preprocessing.winsorize.columns
 
     plot_target_balance(frame, cfg)

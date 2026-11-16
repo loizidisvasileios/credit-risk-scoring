@@ -39,7 +39,7 @@ def plot_importance(explanation: Explanation, config: Config | None = None) -> N
     apply_style(cfg)
 
     shap.plots.bar(explanation, max_display=cfg.explainability.max_display, show=False)
-    
+
     plt.title(f"{cfg.models[cfg.selected_model].display_name} SHAP feature importance")
     _save("shap_importance", cfg)
 

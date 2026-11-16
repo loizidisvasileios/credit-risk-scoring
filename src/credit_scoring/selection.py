@@ -15,7 +15,7 @@ def summarise(per_fold: pd.DataFrame, metric: str = SELECTION_METRIC) -> pd.Data
     grouped = per_fold.groupby("model", sort=False)
 
     table = grouped[metrics].mean()
-    
+
     table[f"{metric}_std"] = grouped[metric].std(ddof=1)
     table[f"{metric}_se"] = table[f"{metric}_std"] / grouped[metric].count() ** 0.5
 
@@ -35,7 +35,7 @@ def pairwise(per_fold: pd.DataFrame, metric: str = SELECTION_METRIC) -> pd.DataF
                 "model_b": right,
                 "mean_difference": difference.mean(),
                 "std_error": difference.std(ddof=1) / len(difference) ** 0.5,
-                
+
                 "folds_won_by_a": int((difference > 0).sum()),
             }
         )

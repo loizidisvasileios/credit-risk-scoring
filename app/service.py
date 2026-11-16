@@ -48,7 +48,7 @@ def credit_score(probability: float) -> int:
 def score_applicant(applicant: dict) -> dict:
     """Return the probability, score, decision and reason codes for one applicant."""
     model, metadata = load_service()
-    
+
     frame = pd.DataFrame([applicant])[metadata["features"]]
 
     probability = float(model.predict_proba(frame)[0, 1])

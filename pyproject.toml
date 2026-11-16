@@ -26,8 +26,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
-# Lower bound plus exclusive upper bound: minor upgrades stay available, while a
-# major release cannot silently break the serialised model or the estimator APIs.
 dependencies = [
     "numpy>=1.26,<3.0",
     "pandas>=2.0,<4.0",
@@ -78,7 +76,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# A test name states the behaviour under test; a docstring would only repeat it.
+
 "tests/*" = ["D103"]
 
 [tool.ruff.lint.pydocstyle]

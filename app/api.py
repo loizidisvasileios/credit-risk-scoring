@@ -35,5 +35,4 @@ def model_info() -> dict:
 @app.post("/predict", response_model=Decision)
 def predict(applicant: Applicant) -> Decision:
     """Score one application and return the decision behind it."""
-    # by_alias restores the dataset column names the model was trained on.
     return Decision(**score_applicant(applicant.model_dump(by_alias=True)))

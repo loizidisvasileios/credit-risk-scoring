@@ -50,7 +50,7 @@ class DataQualityCleaner(BaseEstimator, TransformerMixin):
         """Name every flag this transformer appends, in the order it appends them."""
         names = []
         if self.delinquency_columns:
-            
+
             names.append(self.delinquency_flag)
         if self.utilisation_column:
             names.append(f"{self.utilisation_column}Invalid")
@@ -80,7 +80,7 @@ class DataQualityCleaner(BaseEstimator, TransformerMixin):
             frame[self.utilisation_column] = frame[self.utilisation_column].mask(invalid)
 
         if self.ratio_column and self.income_column:
-          
+
             frame[self.ratio_column] = frame[self.ratio_column].mask(
                 frame[self.income_column].isna()
             )
@@ -129,7 +129,7 @@ class OutlierClipper(BaseEstimator, TransformerMixin):
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """Transform the frame by clipping the columns to the fitted limits."""
         check_is_fitted(self, "bounds_")
-        
+
         frame = _require(X, self.winsorize_columns, "OutlierClipper").copy()
 
         for column, (lower, upper) in self.bounds_.items():
@@ -166,9 +166,9 @@ class DelinquencyCombiner(BaseEstimator, TransformerMixin):
         """Sum the counters, drop them, and return a fixed column order."""
         check_is_fitted(self, "feature_names_out_")
         frame = _require(X, self.columns, "DelinquencyCombiner").copy()
-        
+
         frame[self.output_column] = frame[list(self.columns)].sum(axis=1, min_count=1)
-        
+
         return frame.drop(columns=list(self.columns))[self.feature_names_out_]
 
     def get_feature_names_out(self, input_features: Sequence[str] | None = None) -> list[str]:
@@ -226,7 +226,7 @@ def preprocessing_steps(
             )
         )
 
-    
+
     steps.append(
         ("imputer", SimpleImputer(strategy=pre.imputation_strategy).set_output(transform="pandas"))
     )

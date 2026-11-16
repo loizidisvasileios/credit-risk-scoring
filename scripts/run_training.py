@@ -23,7 +23,7 @@ def main() -> None:
     print(f"Training {name} on {len(split.X_train):,} rows, seed {cfg.random_state}")
     print(f"Calibrating with {cfg.calibration.method} regression, cv={cfg.calibration.cv}")
     model = calibrate_model(split.X_train, split.y_train, cfg)
-   
+
     explanation_model = train_model(name, split.X_train, split.y_train, cfg)
 
     proba = model.predict_proba(split.X_test)[:, 1]

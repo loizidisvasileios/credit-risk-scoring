@@ -31,7 +31,7 @@ def main() -> None:
     split = split_data(load_dataset(cfg), cfg)
 
     sample = split.X_test.sample(n=cfg.explainability.sample_size, random_state=cfg.random_state)
-    
+
     proba = model.predict_proba(sample)[:, 1]
     print(f"Explaining {len(sample):,} test applicants")
 
@@ -40,7 +40,7 @@ def main() -> None:
     plot_beeswarm(explanation, cfg)
 
     threshold = metadata["threshold"]
-    
+
     selected = {
         "highest_risk": int(proba.argmax()),
         "lowest_risk": int(proba.argmin()),

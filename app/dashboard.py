@@ -1,8 +1,5 @@
 """Dash front end for the scoring API.
 
-The dashboard holds no model and no decision logic: it collects an application,
-asks the API, and renders the answer, exactly as a production front end would.
-
 Usage:
     uvicorn app.api:app --port 8000     # first terminal
     python app/dashboard.py             # second terminal

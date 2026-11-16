@@ -62,7 +62,7 @@ def compare_models(X: pd.DataFrame, y: pd.Series, config: Config | None = None) 
         pipeline = build_pipeline(name, cfg)
 
         for fold, (train_index, valid_index) in enumerate(splitter.split(X, y), start=1):
-            
+
             fitted = clone(pipeline).fit(X.iloc[train_index], y.iloc[train_index])
             proba = fitted.predict_proba(X.iloc[valid_index])[:, 1]
             rows.append(

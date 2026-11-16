@@ -45,7 +45,7 @@ def reliability_table(
         )
         .reset_index()
     )
-    
+
     return table.assign(gap=table["observed"] - table["predicted"])
 
 

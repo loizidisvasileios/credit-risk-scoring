@@ -1,24 +1,12 @@
-# ---------------------------------------------------------------------------
-# Data, model and report artefacts
-# ---------------------------------------------------------------------------
-# Contents are excluded but the directories themselves are tracked through a
-# placeholder file, so a fresh clone still shows where each artefact belongs.
-#
-# Datasets are large and licence-bound: fetch them with scripts/download_data.py.
+# Artefacts: contents ignored, the directories kept through .gitkeep.
 data/*
 !data/.gitkeep
-# Serialised models depend on the exact scikit-learn / XGBoost build that wrote
-# them, so they are regenerated locally with scripts/run_training.py.
 models/*
 !models/.gitkeep
-# Figures and tables are produced by the pipeline; a curated subset for the
-# README is force-added under docs/assets/.
 reports/*
 !reports/.gitkeep
 
-# ---------------------------------------------------------------------------
 # Python
-# ---------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
@@ -29,39 +17,28 @@ dist/
 *.egg-info/
 .eggs/
 
-# ---------------------------------------------------------------------------
-# Virtual environments
-# ---------------------------------------------------------------------------
+# Environments
 .venv/
 venv/
 env/
 ENV/
 
-# ---------------------------------------------------------------------------
-# Testing and linting caches
-# ---------------------------------------------------------------------------
+# Caches
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
 .coverage
 htmlcov/
 
-# ---------------------------------------------------------------------------
 # Jupyter
-# ---------------------------------------------------------------------------
 .ipynb_checkpoints/
-# Scratch notebooks, not part of the project.
 notebooks/
 
-# ---------------------------------------------------------------------------
-# Optuna study storage
-# ---------------------------------------------------------------------------
+# Optuna storage
 *.db
 *.sqlite3
 
-# ---------------------------------------------------------------------------
-# Editors and operating system files
-# ---------------------------------------------------------------------------
+# Editors and OS
 .vscode/
 .idea/
 *.swp

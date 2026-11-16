@@ -53,7 +53,7 @@ def main() -> None:
     )
     print(f"\n{comparison.round(4).to_string(index=False)}")
 
-   
+
     rank_correlation = spearmanr(raw_proba, calibrated_proba).statistic
     print(f"\nrank correlation, raw vs calibrated: {rank_correlation:.6f}")
 

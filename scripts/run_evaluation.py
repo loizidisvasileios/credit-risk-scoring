@@ -27,7 +27,7 @@ def main() -> None:
         proba = model.predict_proba(split.X_test)[:, 1]
         rows.append({"model": model_config.display_name, **compute_metrics(split.y_test, proba)})
 
-   
+
     table = pd.DataFrame(rows)
     print(table.round(4).to_string(index=False))
 

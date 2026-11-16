@@ -1,20 +1,5 @@
-# ===========================================================================
-# Line-ending and diff policy.
-#
-# Git stores one canonical form regardless of the operating system a
-# contributor works on. Without these rules, a Windows checkout rewrites every
-# line ending, and a later edit on macOS or Linux shows the whole file as
-# changed, which makes diffs and code review useless.
-#
-# These rules override each contributor's personal core.autocrlf setting, so
-# the repository behaves identically for everyone.
-# ===========================================================================
-
-# Detect text files automatically and store them with LF, the convention for
-# Python projects and the form every modern editor reads correctly.
 * text=auto eol=lf
 
-# --- Source and configuration ----------------------------------------------
 *.py      text eol=lf
 *.pyi     text eol=lf
 *.toml    text eol=lf
@@ -29,13 +14,10 @@
 .gitignore      text eol=lf
 .gitattributes  text eol=lf
 
-# Windows batch files break if their CRLF endings are stripped.
+# Batch files break without CRLF.
 *.bat     text eol=crlf
 *.cmd     text eol=crlf
 
-# --- Binary artefacts ------------------------------------------------------
-# Marked binary so Git never rewrites their bytes and never attempts a
-# line-based diff, which would corrupt them or flood the review.
 *.pkl     binary
 *.joblib  binary
 *.npy     binary
@@ -47,7 +29,5 @@
 *.pdf     binary
 *.zip     binary
 
-# --- Notebooks -------------------------------------------------------------
-# Notebooks are JSON, so they are text, but their embedded outputs make diffs
-# unreadable. Suppressing the diff keeps pull requests reviewable.
+# Embedded outputs make notebook diffs unreadable.
 *.ipynb   text eol=lf -diff

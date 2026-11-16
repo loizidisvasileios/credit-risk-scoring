@@ -48,7 +48,7 @@ def save_model(
 
     metadata = {
         "model": name,
-        
+
         "calibrated": isinstance(model, CalibratedClassifierCV),
         "features": features,
         "threshold": cfg.threshold.optimal_cutoff,
